@@ -75,7 +75,7 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
  async function detail(id){const result=await api(adminPath()+'?'+new URLSearchParams({id,...(admin&&target?{target}:{})}));showRecord(result.application);}
  function showRecord(value){
   record=value;const s=record.snapshot;
-  shell('申請紀錄',`<p class="ra-note">${status(record.status)}。申請簽署完成不代表權限已開通。</p><button data-action="refresh">← 返回申請清單</button><button data-action="pdf" class="primary">下載已簽申請書 PDF</button><div data-download></div><small class="ra-copy">申請編號：${esc(record.id)}</small>${snapshotHtml(s)}<h3>簽署確認</h3>${Object.values(s.confirmations).map(v=>`<p>${esc(v)}</p>`).join('')}<canvas width="1000" height="400" aria-label="已保存的手寫簽名"></canvas><p>簽署時間：${esc(new Date(record.signed_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}))}</p><small class="ra-copy">內容校驗碼：${esc(record.content_sha256)}</small><p>${esc(s.assurance)}</p>${record.review_note?`<h3>審核說明</h3><p class="ra-copy">${esc(record.review_note)}</p>`:''}${admin&&record.status==='pending'?'<form data-form="review"><h3>平台審核</h3><label>審核說明（必填）<textarea name="note" required maxlength="1000" rows="3"></textarea></label><button type="submit" name="decision" value="accepted">確認審核通過</button><button type="submit" name="decision" value="rejected">審核不通過</button><p>只記錄審核結果，不自動改角色、開通贈點或折抵權限，也不修改商品設定。審核後不可覆寫此筆結果。</p></form>':''}`);
+  shell('申請紀錄',`<p class="ra-note">${status(record.status)}。申請簽署完成不代表權限已開通。</p><button data-action="refresh">← 返回申請清單</button><button data-action="pdf" class="primary">下載已簽申請書 PDF</button><div data-download></div><small class="ra-copy">申請編號：${esc(record.id)}</small>${snapshotHtml(s)}<h3>簽署確認</h3>${Object.values(s.confirmations).map(v=>`<p>${esc(v)}</p>`).join('')}<canvas width="1000" height="400" aria-label="已保存的手寫簽名"></canvas><p>簽署時間：${esc(new Date(record.signed_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}))}</p><small class="ra-copy">內容校驗碼：${esc(record.content_sha256)}</small><p>${esc(s.assurance)}</p>${record.review_note?`<h3>審核說明</h3><p class="ra-copy">${esc(record.review_note)}</p>`:''}${admin&&record.status==='pending'?'<form data-form="review"><h3>平台審核</h3><label>審核說明（通過選填，不通過必填）<textarea name="note" maxlength="1000" rows="3"></textarea></label><button type="submit" name="decision" value="accepted">確認審核通過</button><button type="submit" name="decision" value="rejected">審核不通過</button><p>只記錄審核結果，不自動改角色、開通贈點或折抵權限，也不修改商品設定。審核後不可覆寫此筆結果。</p></form>':''}`);
   drawSignature(dialog.querySelector('canvas').getContext('2d'),s.signing.strokes);
  }
  dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
@@ -107,6 +107,7 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
     const result=await api('/submit',attempt);showRecord(result.application);
    }else if(formEl.dataset.form==='review'){
     const note=String(submittedValues.get('note')||'').trim(),decision=submittedDecision;
+    if(decision==='rejected'&&!note){formEl.elements.note.focus();throw Error('審核不通過時，請填寫原因');}
     if(!window.confirm('確定送出此審核結果？此操作不會開通或變更贈點、折抵權限與商品設定。'))return;
     showRecord((await api('/review',{id:record.id,decision,note})).application);
    }

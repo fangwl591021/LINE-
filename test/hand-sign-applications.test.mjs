@@ -179,6 +179,16 @@ async function signedReviewApplication(f,kind){
  assert.equal((await f.call(kind,'/submit',payload)).http,200);return preview.preview_id;
 }
 for(const kind of ['reward','discount','partner','full']){
+ test(kind+' review allows approval without a note and requires a reason for rejection',async t=>{
+  const f=await handSignFixture(t),id=await signedReviewApplication(f,kind);
+  for(const note of [undefined,'   ']){
+   const response=await f.call(kind,'/review',{id,decision:'rejected',note},'admin');assert.equal(response.http,400);assert.match(response.error,/填寫原因/);
+  }
+  const rows=()=>f.sql.prepare('SELECT * FROM '+kind+'_application_reviews WHERE application_id=?').all(id);
+  assert.equal(rows().length,0);
+  for(const note of [undefined,'   '])assert.equal((await f.call(kind,'/review',{id,decision:'accepted',note},'admin')).http,200);
+  assert.equal(rows().length,1);const [row]=rows();assert.equal(row.note,'');assert.equal(row.decision,'accepted');assert.equal(row.reviewer_uid,ADMIN);assert.ok(row.reviewed_at);
+ });
  for(const change of ['foreign-alias','active-link'])test(kind+' review atomically rejects a new '+change+' outside the unchanged administrator row',async t=>{
   const f=await handSignFixture(t),id=await signedReviewApplication(f,kind),original=f.db.prepare.bind(f.db);
   const before=f.sql.prepare('SELECT * FROM users WHERE line_id=?').get(ADMIN);let changed=false;

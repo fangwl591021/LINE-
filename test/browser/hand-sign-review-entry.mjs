@@ -34,7 +34,8 @@ const server=createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname.startsWith('/v1/')){
   requests.push({path:url.pathname+url.search,method:req.method});
-  const response=await handleRewardApplications(new Request(url,{headers:req.headers}),fixture.env,mapper,fetcher);
+  const chunks=[];for await(const chunk of req)chunks.push(chunk);
+  const response=await handleRewardApplications(new Request(url,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})}),fixture.env,mapper,fetcher);
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
  }
  if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(html);return;}
@@ -52,6 +53,9 @@ try{
   assert.deepEqual(requests,[{path:'/v1/'+kind+'-applications/admin?id='+record.id,method:'GET'}]);
   assert(!page.url().includes('applicationId'));assert.equal(await page.locator('[name=note]').count(),1);
   assert(await page.evaluate(()=>document.querySelector('dialog').scrollWidth<=document.querySelector('dialog').clientWidth+1));
+  await page.getByRole('button',{name:'審核不通過',exact:true}).click();await page.getByText('審核不通過時，請填寫原因',{exact:true}).waitFor();assert.equal(requests.length,1);
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'確認審核通過',exact:true}).click();await page.locator('[data-form="review"]').waitFor({state:'detached'});
+  const saved=fixture.sql.prepare('SELECT note,decision,reviewer_uid FROM '+kind+'_application_reviews WHERE application_id=?').get(record.id);assert.equal(saved.note,'');assert.equal(saved.decision,'accepted');assert.equal(saved.reviewer_uid,ADMIN);
   await page.screenshot({path:join(output,kind+'-admin-specific-390.png')});
   await page.evaluate(()=>{window.testToken='user';window.currentUserProfile={userId:'synthetic-other-session'};});await page.locator('dialog').waitFor({state:'detached'});
  }

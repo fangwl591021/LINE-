@@ -62,7 +62,7 @@ test('expired/superseded preview and invalid signature never create application'
 test('admin review is immutable/idempotent; no role, catalog, referral or signed snapshot mutation',async t=>{
  const s=fixture(t),{id}=await submit(s),before=s.sql.prepare('SELECT * FROM users').all(),row=s.sql.prepare('SELECT * FROM discount_applications').get();
  const proposal={id,decision:'accepted',note:'合成審核，未開通折抵'};
- assert.equal((await s.call('/review',proposal)).http,403);assert.equal((await s.call('/review',{...proposal,note:''},'admin')).http,400);
+ assert.equal((await s.call('/review',proposal)).http,403);assert.equal((await s.call('/review',{...proposal,decision:'rejected',note:''},'admin')).http,400);
  assert.equal((await s.call('/review',proposal,'admin')).application.status,'accepted');assert.equal((await s.call('/review',proposal,'admin')).http,200);assert.equal((await s.call('/review',{...proposal,decision:'rejected'},'admin')).http,409);
  assert.deepEqual(s.sql.prepare('SELECT * FROM discount_applications').get(),row);assert.deepEqual(s.sql.prepare('SELECT * FROM users').all(),before);assert.equal(s.sql.prepare('SELECT count(*) n FROM discount_application_reviews').get().n,1);
 });
