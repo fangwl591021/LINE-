@@ -9993,6 +9993,7 @@ const D1ReadModule = {
 
     users.forEach(row => {
       const profile = this.userRow(row);
+      if (profile && row.crm_annual_fee_expire_at != null) profile.annualFeeExpireAt = row.crm_annual_fee_expire_at;
       addProfile(profile);
     });
 
@@ -10774,10 +10775,12 @@ const D1WriteModule = {
       user.role = existing ? this.role(existing.role) : 'user';
     }
     user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
+    const writeExpiry = options.crmExpiry !== undefined;
     const profileWrite = env.ACTMASTER_DB.prepare(`
-      INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id${writeExpiry ? ",crm_annual_fee_expire_at" : ""})
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?${writeExpiry ? ",?" : ""})
       ON CONFLICT(line_id) DO UPDATE SET
+        ${writeExpiry ? "crm_annual_fee_expire_at=excluded.crm_annual_fee_expire_at," : ""}
         name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
         region=excluded.region,address=excluded.address,socials=excluded.socials,
         role=CASE
@@ -10792,7 +10795,7 @@ const D1WriteModule = {
         network_id=CASE WHEN ${options.rewardActor ? '1' : '0'} AND COALESCE(users.referrer_id,'')<>'' THEN users.network_id ELSE excluded.network_id END,
         tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
       WHERE ${options.createOnly ? '0' : '1'}
-    `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id);
+    `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id,...(writeExpiry ? [options.crmExpiry] : []));
     const userWrite = options.rewardActor && options.rewardActor === user.line_id
       ? await writeRegistrationWithCredits(env.ACTMASTER_DB, user, profileWrite)
       : await profileWrite.run();
@@ -10806,8 +10809,9 @@ const D1WriteModule = {
       console.error('D1 referral placeholder failed', e && e.message ? e.message : e);
       return null;
     });
+    const savedRow = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]);
     const info = D1ReadModule.userRow({
-      ...await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]),
+      ...savedRow,
       row_id: user.row_id,
       line_id: user.line_id,
       name: user.name,
@@ -10821,6 +10825,10 @@ const D1WriteModule = {
       tg_token: user.tg_token,
       tg_chat_id: user.tg_chat_id
     });
+    if (writeExpiry) {
+      if (savedRow?.crm_annual_fee_expire_at !== options.crmExpiry) return {success:false,error:'年費到期日未能核實，請重新載入確認'};
+      info.annualFeeExpireAt = savedRow.crm_annual_fee_expire_at;
+    }
     return { success: true, data: { isRegistered: true, info, source: 'd1_write', referralPlaceholder } };
   },
 
@@ -17382,6 +17390,11 @@ async function dispatchAction(action, payload, request, env) {
     case 'adminAppendDealerFollowup':
       return dealerCrmFollowups(action, payload, actor, env.ACTMASTER_DB);
     case 'adminSyncBoundCardUser': {
+      const expiry = payload.profile?.annualFeeExpireAt;
+      if (expiry !== undefined && (typeof expiry !== 'string' || (expiry !== '' &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(expiry) || !Number.isFinite(Date.parse(expiry)) || new Date(expiry).toISOString().slice(0,10) !== expiry)))) {
+        return {success:false,error:'年費到期日請輸入有效日期，或留白清除'};
+      }
       try {
         const profile = {
           ...(payload.profile || {}),
@@ -17391,10 +17404,12 @@ async function dispatchAction(action, payload, request, env) {
           authenticatedRole: payload.authenticatedRole,
           authenticatedNetworkId: payload.authenticatedNetworkId
         };
-        const d1Result = await D1WriteModule.upsertUser(profile, env);
+        const d1Result = await D1WriteModule.upsertUser(profile, env, {crmExpiry: expiry});
+        if (expiry !== undefined) return d1Result || {success:false,error:'無法儲存年費到期日，請稍後再試'};
         if (d1Result?.code === 'MEMBER_REFERRER_INVALID') return d1Result;
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
+        if (expiry !== undefined) return {success:false,error:'無法確認 CRM 儲存結果，請重新載入確認'};
         console.error("D1 adminSyncBoundCardUser fallback", e);
       }
       return await AuthModule.adminSyncBoundCardUser(payload, env);
