@@ -485,4 +485,10 @@ test('initial full shop imports only own active standard card and keeps draft pr
  const saved=await call('/store',store({name:'自訂店名',status:'draft'}),'a');
  assert.equal(saved.shop.status,'draft');assert.equal((await call('?shop='+saved.shop.id)).status,404);
  const reopened=await call(path,null,'a');assert.equal(reopened.card_prefill,undefined);assert.equal(reopened.shop.name,'自訂店名');
+ const imported=await call('/my-card?owner_uid='+B,null,'a');
+ assert.deepEqual(imported.card,draft.card_prefill);
+ assert.equal((await call('/my-card')).status,401);assert.equal((await call('/my-card',null,'b')).status,403);
+ assert.equal(sql.prepare('SELECT name FROM store_shop_stores WHERE owner_uid=?').get(A).name,'自訂店名');
+ sql.prepare('UPDATE users SET role=? WHERE line_id=?').run('redeem',A);
+ assert.equal((await call('/my-card',null,'a')).status,403);
 });
