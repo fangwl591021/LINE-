@@ -34,6 +34,8 @@
 - 商城目前由 `.store-shop.shop-lifestyle` 套用 `system-ui,"Noto Sans TC",sans-serif`，後段 points theme 設定基準字級 `16px`；前段 `.store-shop` 的 `system-ui,sans-serif` 僅為基礎 fallback。教學按鈕沿用頁面字體；其他頁面先查看現有繼承與 utility class，不為統一而替換全域字體。
 - 圖示沿用 Material Symbols 的既有字型／填色設定；企業圖片與頭貼沿用各元件的裁切方式。
 
+經銷商 CRM 在桌面將會員點數放左欄，基本資料放右欄。點數明細位於點數操作下方，每次開啟 CRM 時收合；窄螢幕依點數、基本資料順序顯示。
+
 ## 間距、卡片與操作元件
 
 | 元件 | 現行數值與行為 |
