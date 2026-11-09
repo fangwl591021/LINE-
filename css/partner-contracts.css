@@ -1,0 +1,16 @@
+.partner-contract-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.partner-contract-dialog .ra-note p { margin: 4px 0 0; }
+.partner-contract-dialog summary {
+  min-height: 44px;
+  padding: 10px 4px;
+  color: #14584f;
+  cursor: pointer;
+}
+.partner-contract-dialog details + details { border-top: 1px solid #d6e6e1; }
+.partner-contract-dialog details[open] > summary { font-weight: 700; }
+.partner-contract-dialog .ra-record > details[open] { padding-bottom: 8px; }
+.partner-contract-dialog .ra-record summary:focus-visible { outline-offset: 0; }
