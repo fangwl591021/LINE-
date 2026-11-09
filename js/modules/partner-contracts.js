@@ -11,6 +11,27 @@ const value=(record,snake,camel)=>record?.[snake]??record?.[camel]??'';
 const money=amount=>Number.isFinite(Number(amount))?Number(amount).toLocaleString('zh-TW'):'待核';
 const mask=account=>account?`末 ${String(account).slice(-4)} 碼`:'未登錄';
 const statusText=status=>({review_required:'待核對',frozen:'待請款',payable:'可給付',paid:'已付款',reversed:'已取消',cancelled_by_contract:'依契約取消未付款獎勵',contract_inactive:'契約目前無效，待核對',active:'有效',not_effective:'尚未生效',termination:'已終止',nonrenewal:'已到期不續約'}[status]||status||'待核對');
+// Build the existing admin enrollment request from the immutable, approved hand-sign record.
+async function signedEnrollment(a,target,id){
+ const s=a?.snapshot,t=s?.template,f=s?.fields;
+ if(!a || a.id!==id || a.status!=='accepted' || s?.form_kind!=='partner' || t?.kind!=='partner' ||
+    s.signer_uid!==target || s.signed_at!==a.signed_at || !s.signing || s.signing.preview_id!==id || !f)
+  throw Error('無法核對此會員已簽署且審核通過的共創夥伴契約。');
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(s)))),b=>b.toString(16).padStart(2,'0')).join('');
+ if(digest!==a.content_sha256)throw Error('簽署內容與原始校驗碼不符，請重新核對文件。');
+ const versions={
+  'partner-115.11-hand-sign-2026-11-05-r2':[TEMPLATE,'4126be459a0ea6a48c7b755e814d700e7fa1f98941b7a013a3bfc40678cacaf2'],
+  'partner-115.11-hand-sign-2026-11-04-v1':['115.11','91fa4438661132222d0f5a77f54e10ab76d7c8eb3338ebd0f11175b7be4aabef'],
+  'partner-115.10-hand-sign-2026-10-29-v2':['115.10','1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c'],
+  'partner-115.10-hand-sign-2026-10-28-v1':['115.10','224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa']};
+ const pin=versions[t.version];
+ if(!pin||pin[1]!==t.source_sha256||s.attribution_mode!=='applicant_performance_v1')throw Error('這份歷史契約須人工核對版本與推薦人，請依原始文件登錄。');
+ if(Boolean(f.performance_owner_name)!==Boolean(f.performance_owner_member_number))throw Error('契約的推薦人姓名與會員編號不齊，請核對原始文件。');
+ return {target_uid:target,templateVersion:pin[0],signedAt:a.signed_at,effectiveAt:a.signed_at,partyType:f.party_type,partyName:f.unit_name,
+ representativeName:f.representative_name||'',referrerName:f.performance_owner_name||'',referrerMemberNumber:f.performance_owner_member_number||'',
+ bankName:f.bank_name,bankCode:f.bank_code,bankBranch:f.bank_branch,bankAccountHolder:f.bank_account_holder,bankAccount:f.bank_account,
+ documentSha256:digest,evidenceRef:'線上手簽：'+id,purchaseStatus:'unknown'};
+}
 let active;
 
 export async function openPartnerContracts({base,target,orderId='',isCurrent=()=>true,fetcher=fetch}={}){
@@ -36,9 +57,9 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   dialog.querySelector('[data-close]').onclick=()=>close();
  };
  const status=message=>{const el=dialog.querySelector('[data-status]');if(el)el.textContent=message;};
- const api=async(path='',data)=>{
+ const api=async(path='',data,root='/v1/partner-contracts')=>{
   if(!valid())throw Error('登入或頁面已變更，請重新開啟');
-  const response=await fetcher(String(base).replace(/\/+$/,'')+'/v1/partner-contracts'+path,{
+  const response=await fetcher(String(base).replace(/\/+$/,'')+root+path,{
    method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},
    body:data?JSON.stringify(data):undefined,cache:'no-store',signal:AbortSignal.timeout(20000)
   });
@@ -101,7 +122,9 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
    ${result.heldOrders?.length?action('orderReferral','核對推薦人（'+result.heldOrders.length+' 筆訂單）',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+proofFields):''}
    ${pending.length ? dealAction : ""}
    ${result.renewalHolds?.length ? renewalAction : ""}
-   ${action('contract','登錄已簽契約',`
+   <details data-signed><summary>登錄已簽契約</summary>
+    <div data-online role="region" aria-label="線上已簽契約" aria-live="polite">正在查詢此會員的手簽紀錄…</div>
+    ${action('contract','另外登錄紙本契約',`
     ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.11（持續收益與完整版資格修正版）'],['115.11','115.11（原版）'],['115.10','115.10（仍以該版簽署的文件）']])}
     ${input('signedAt','實際簽署時間（亦為契約生效時間）','datetime-local')}
     ${select('partyType','乙方簽約身分',[['natural_person','自然人'],['company','公司／商號／法人']])}
@@ -115,6 +138,7 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
     ${select('purchaseStatus','本人完整版購買狀態',[['unknown','待確認'],['not_purchased','未購買'],['purchased','已購買']])}
     ${input('purchaseOrderId','本人完整版購買訂單編號（已購買時必填）','text',false)}
     ${agreement('我已核對所選版本與雙方實際簽署文件、簽署時間、簽約身分、原推薦人、銀行資料及購買狀態，並保管簽署證據。')}${submit('確認登錄已簽契約')}`)}
+   </details>
    ${result.projectFeeWaivedAt&&result.projectIndependentAt?"":action("project","登錄專案資格",`<label><input type="checkbox" name="waiveFee" ${result.projectFeeWaivedAt?"disabled":""}> 本次年費專案免收，實收 NT$0</label><label><input type="checkbox" name="independent" ${result.projectIndependentAt?"disabled":""}> 核准後首筆有效推薦新約即按獨立夥伴計算</label>`+input("reason","專案名稱或核准原因")+agreement("已核對本次專案資格及適用對象")+submit("儲存專案資格"))}
    </section>
    <details class="ra-record"><summary>其他管理與紀錄</summary>
@@ -143,6 +167,57 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
    </details></details>
    <button type="button" data-refresh>重新整理</button>`);
   dialog.querySelector('[data-refresh]').onclick=()=>run(load);
+  const panel=dialog.querySelector('[data-signed]'),online=panel.querySelector('[data-online]');
+  const signedApi=params=>api('?'+new URLSearchParams({target,...params}),undefined,'/v1/partner-applications/admin');
+  const localDate=date=>new Date(date).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});
+  const registered=a=>records.some(r=>r.evidence_ref==='線上手簽：'+a.id || (a.content_sha256 && r.document_sha256===a.content_sha256));
+  const errorInPanel=error=>{
+   if(!valid()||!panel.isConnected)return;
+   online.innerHTML='<p role="alert"></p><button type="button">重新查詢線上契約</button>';
+   online.firstChild.textContent=error.message;
+   online.querySelector('button').onclick=()=>run(showSigned);
+  };
+  async function showSigned(){
+   try{
+    const rows=[];let after='';
+    do{const page=await signedApi(after?{after}:{});rows.push(...(page.applications||[]));after=page.next||'';}while(after);
+    if(!panel.isConnected)return;
+    online.replaceChildren();
+    if(!rows.length){online.textContent='尚無線上簽署紀錄。請會員到「會員專區 → 合作申請 → 共創夥伴合作契約」簽署。';return;}
+    for(const row of rows.sort((a,b)=>b.signed_at.localeCompare(a.signed_at))){
+     const card=document.createElement('article');card.className='ra-record';online.append(card);
+     const state=registered(row)?'已登錄':records.some(r=>Date.parse(r.signed_at)===Date.parse(row.signed_at))?'同一簽署時間已有登錄，請核對紀錄':row.status==='accepted'?'審核通過':row.status==='pending'?'待審核':'審核未通過';
+     card.innerHTML='<strong>'+esc(row.unit_name||row.applicant_name)+'</strong><p>'+esc(localDate(row.signed_at))+'（台北） · '+state+'</p>';
+     if(state==='待審核')card.append('請先到「CRM 合作申請審核 → 共創夥伴合作契約」審核。');
+     if(state!=='審核通過')continue;
+     const preview=document.createElement('button');preview.type='button';preview.textContent='查看並登錄';card.append(preview);
+     preview.onclick=()=>run(async()=>{
+      try{
+       const a=(await signedApi({id:row.id})).application;
+       const payload=await signedEnrollment(a,target,row.id);
+       if(registered(a)){card.textContent='此份已簽契約已登錄。';return;}
+       let crmName='';
+       if(payload.referrerMemberNumber){
+        const {member}=await api('/lookup?'+new URLSearchParams({memberNumber:payload.referrerMemberNumber}));
+        if(!member?.userId || member.userId===target || member.memberNumber!==payload.referrerMemberNumber)throw Error('契約推薦人編號無法核對，請先確認。');
+        crmName=member.name;
+       }
+       const info=document.createElement('p');info.className='ra-note';
+       info.textContent=['簽約方：'+payload.partyName,'版本：'+payload.templateVersion,
+        '契約推薦人：'+(payload.referrerName?payload.referrerName+'（'+payload.referrerMemberNumber+'；CRM：'+crmName+'）':'未填'),
+        '收款帳戶：'+payload.bankName+' · '+mask(payload.bankAccount)].join('　');
+       preview.replaceWith(info);
+       const save=document.createElement('button');save.className='primary';save.type='button';save.textContent='確認登錄這份契約';card.append(save);
+       save.onclick=()=>run(async()=>{
+        await api('',{...payload,confirmed:true,requestKey:a.id});await load();
+        status('已登錄 '+payload.partyName+' 的共創夥伴契約。');
+       });
+      }catch(e){errorInPanel(e);}
+     });
+    }
+   }catch(e){errorInPanel(e);}
+  }
+  let opened=false;panel.ontoggle=()=>{if(panel.open&&!opened){opened=true;void showSigned();}};
   dialog.querySelector('[data-file]').onchange=()=>run(async()=>{
    const file=dialog.querySelector('[data-file]').files[0];if(!file)return;
    if(file.size>20*1024*1024)throw Error('文件請小於20MB');

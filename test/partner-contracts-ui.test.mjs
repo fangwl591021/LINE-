@@ -132,3 +132,47 @@ test('paid order opens after a retry and explains the missing signed application
   assert.equal(await form.getByRole('button',{name:'確認業務歸屬'}).count(),0);
  }finally{await browser.close();}
 });
+
+test('registers an approved signed application without retyping; pending, absent and mismatched evidence cannot be enrolled',async()=>{
+ const src=await readFile(new URL('../js/modules/partner-contracts.js',import.meta.url),'utf8');
+ const browser=await chromium.launch({channel:'chrome',headless:true});
+ try{
+  const page=await browser.newPage();
+  await page.route('https://fixture.invalid/',r=>r.fulfill({contentType:'text/html',body:'<link data-reward-application-style>'}));
+  await page.goto('https://fixture.invalid/');
+  await page.addScriptTag({type:'module',content:src+'\nwindow.startCRM=openPartnerContracts;'});
+  await page.evaluate(async()=>{
+   const target='U'+'b'.repeat(32),id=crypto.randomUUID(),signed_at='2026-11-07T08:00:00.000Z';
+   window.liff={isLoggedIn:()=>true,getAccessToken:()=>'synthetic',getContext:()=>({userId:'U'+'a'.repeat(32)})};
+   const snapshot={signer_uid:target,form_kind:'partner',signing:{preview_id:id},signed_at,attribution_mode:'applicant_performance_v1',
+    template:{kind:'partner',version:'partner-115.11-hand-sign-2026-11-05-r2',source_sha256:'4126be459a0ea6a48c7b755e814d700e7fa1f98941b7a013a3bfc40678cacaf2'},
+    fields:{unit_name:'合成乙方',party_type:'natural_person',bank_name:'測試銀行',bank_code:'123',bank_branch:'測試分行',bank_account_holder:'合成乙方',bank_account:'1234567890'}};
+   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(snapshot)))),b=>b.toString(16).padStart(2,'0')).join('');
+   window.writes=[];
+   window.show=mode=>window.startCRM({base:'https://fixture.invalid',target,fetcher:async(url,init)=>{
+    const u=new URL(url);let data={contracts:window.writes.map(p=>({id:'registered',evidence_ref:p.evidenceRef,signed_at:p.signedAt}))};
+    if(u.pathname.includes('/partner-applications/')){
+     if(u.searchParams.get('target')!==target)throw Error('target missing');
+     const a={id,status:mode==='pending'?'pending':'accepted',signed_at,unit_name:'合成乙方'};
+     data=u.searchParams.has('id')?{application:{...a,snapshot,content_sha256:mode==='bad'?'0'.repeat(64):digest}}:{applications:mode==='empty'?[]:[a]};
+    }else if(init.method==='POST'){window.writes.push(JSON.parse(init.body));data={};}
+    return {ok:true,json:async()=>({success:true,...data})};
+   }});
+  });
+  const open=async mode=>{await page.evaluate(m=>window.show(m),mode);await page.getByText('登錄已簽契約',{exact:true}).click();};
+  for(const [mode,label] of [['empty','尚無線上簽署紀錄'],['pending','請先到']]){
+   await open(mode);await page.locator('[data-online]').getByText(new RegExp(label)).first().waitFor();
+   assert.equal(await page.getByText('查看並登錄',{exact:true}).count(),0);await page.locator('[data-close]').click();
+  }
+  await open('bad');await page.getByText('查看並登錄').click();await page.getByText(/簽署內容與原始校驗碼不符/).waitFor();
+  assert.equal(await page.evaluate(()=>window.writes.length),0);await page.locator('[data-close]').click();
+  await open('ok');assert.equal(await page.locator('[name=bankName]').isVisible(),false);
+  await page.getByText('查看並登錄').click();await page.getByText(/末 7890 碼/).waitFor();
+  await page.getByText('確認登錄這份契約').click();await page.getByText('已登錄 合成乙方 的共創夥伴契約。').waitFor();
+  const [posted]=await page.evaluate(()=>window.writes);
+  assert.equal(posted.bankAccount,'1234567890');assert.equal(posted.templateVersion,'115.11-R2');assert.equal(posted.signedAt,posted.effectiveAt);
+  assert.equal(posted.evidenceRef,'線上手簽：'+posted.requestKey);
+  await page.locator('[data-close]').click();await open('ok');await page.locator('[data-online]').getByText(/已登錄/).waitFor();
+  assert.equal(await page.getByText('查看並登錄').count(),0);
+ }finally{await browser.close();}
+});
