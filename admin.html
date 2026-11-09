@@ -430,6 +430,7 @@
     .checkin-editor-grid{display:grid;grid-template-columns:1fr 1.5fr;gap:12px;margin-top:14px}.checkin-editor label{display:grid;gap:7px;font-weight:800;color:#344054}.checkin-editor input,.checkin-editor textarea{width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px;font:inherit}.checkin-editor textarea{min-height:110px;resize:vertical}.checkin-switch{display:flex!important;display:flex;align-items:center;gap:8px;margin-top:14px}.checkin-switch input{width:18px}.checkin-preview{grid-column:2;position:sticky;top:16px;min-height:240px}.checkin-preview span{display:block;color:#718096;font-size:13px;margin-top:5px}.checkin-preview pre{margin-top:14px;background:#101828;color:#e5e7eb;padding:12px;border-radius:10px;min-height:180px;white-space:pre-wrap;font-size:12px}
     @media(max-width:900px){.checkin-copy-page{grid-template-columns:1fr}.checkin-editor,.checkin-preview{grid-column:1}.checkin-preview{position:static}.checkin-editor-grid{grid-template-columns:1fr}}
   .checkin-page-card{border:1px solid #dbe4ef;border-radius:12px;padding:14px;margin-top:12px;background:#fff}.checkin-page-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.checkin-page-card-head button{border:0;background:#fff1f2;color:#be123c;border-radius:8px;padding:6px 10px;font-weight:700}.checkin-page-card label{display:block;margin-top:8px;font-size:13px;color:#475569}.checkin-page-card input{display:block;width:100%;margin-top:5px;border:1px solid #dbe4ef;border-radius:8px;padding:9px}</style>
+<link rel="stylesheet" href="css/dealer-workspace.css?v=1">
 </head>
 <body class="text-slate-800 h-screen flex overflow-hidden relative">
 
@@ -1418,8 +1419,22 @@
       </div>
       <div class="flex-1 overflow-y-auto bg-white p-6 space-y-6">
         <input type="hidden" id="crm-user-id">
-        <div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
-
+        <section class="dealer-focus rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3"><div class="min-w-0"><div class="text-sm font-bold text-blue-700">下次跟進</div>
+          <h4 id="dealer-next" class="text-lg font-bold break-words"></h4><p id="dealer-owner" class="text-sm"></p></div>
+          <button id="dealer-record" type="button" class="rounded-lg bg-blue-700 px-4 py-2 font-bold text-white" aria-controls="dealer-form" aria-expanded="false">＋ 記錄跟進</button></div>
+          <p class="mt-3 border-t border-blue-200 pt-2 break-words">最近紀錄　<span id="dealer-last"></span></p>
+        </section>
+        <form id="dealer-form" class="dealer-form" hidden>
+          <h4 class="text-lg font-bold">記錄跟進</h4>
+          <label>本次聯絡結果<textarea name="outcome" required maxlength="1000" rows="2"></textarea></label>
+          <label>下一步<input name="next_action" required maxlength="250"></label>
+          <div class="grid gap-3 sm:grid-cols-2"><label>下次聯絡日期<input name="due_date" required type="date"></label><label>負責人<input name="owner_name" required maxlength="100"></label></div>
+          <div class="flex justify-end gap-3"><button type="button" id="dealer-cancel">取消</button><button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-white">儲存跟進紀錄</button></div>
+        </form>
+        <p id="dealer-status" role="status" aria-live="polite"></p>
+        <nav class="dealer-nav" aria-label="會員資料分區"><button type="button" aria-controls="dealer-overview" aria-pressed="true">會員總覽</button><button type="button" aria-controls="dealer-timeline" aria-pressed="false">跟進紀錄</button><button type="button" aria-controls="dealer-org" aria-pressed="false">組織與業績</button><button type="button" aria-controls="dealer-review" aria-pressed="false">審核與系統</button></nav>
+        <div id="dealer-overview" class="space-y-4">
         <div class="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] items-start gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -1509,15 +1524,15 @@
               <label class="md:col-span-2 text-sm font-bold text-slate-500">標籤<input id="crm-tags" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500" placeholder="#待跟進 #租戶 #講師"></label>
             </div>
           </section>
-        </div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+        </div><div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div></div>
+        <div id="dealer-timeline" class="space-y-4" hidden><section class="rounded-xl border p-5"><h4 class="font-black">跟進紀錄</h4><ol id="dealer-history"></ol></section></div>
+        <div id="dealer-org" class="space-y-4" hidden><div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
               <span class="material-symbols-outlined text-purple-500 text-[20px]">account_tree</span>
               <h4 class="font-black text-slate-800">推薦與組織</h4>
             </div>
-            <div id="crm-org-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
+            <p class="px-5 pt-4 text-sm">手簽申請推薦人（最近共創夥伴申請）　<strong id="dealer-signed">讀取中</strong></p><div id="crm-org-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
           </section>
 
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1527,9 +1542,8 @@
             </div>
             <div id="crm-finance-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
           </section>
-        </div>
-
-        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        </div></div>
+        <div id="dealer-review" class="space-y-4" hidden><section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <span class="material-symbols-outlined text-emerald-600 text-[20px]">fact_check</span>
             <h4 class="font-black text-slate-800">正式經銷商審核資料</h4>
@@ -1570,22 +1584,7 @@
             <label class="text-sm font-bold text-slate-500">簽署日期<input id="crm-contract-signed-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
             <label class="text-sm font-bold text-slate-500">審核備註<input id="crm-kyc-note" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
           </div>
-        </section>
-
-        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-            <span class="material-symbols-outlined text-blue-500 text-[20px]">event_note</span>
-            <h4 class="font-black text-slate-800">跟進紀錄</h4>
-          </div>
-          <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label class="text-sm font-bold text-slate-500">最近聯絡<input id="crm-last-contact" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
-            <label class="text-sm font-bold text-slate-500">下次跟進<input id="crm-next-follow" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
-            <label class="text-sm font-bold text-slate-500">負責人<input id="crm-owner" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
-            <label class="md:col-span-3 text-sm font-bold text-slate-500">跟進備註<textarea id="crm-notes" rows="5" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 resize-none" placeholder="說明狀態、反對問題、下次要追的重點..."></textarea></label>
-          </div>
-        </section>
-
-        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+        </section><div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
               <span class="material-symbols-outlined text-indigo-500 text-[20px]">style</span>
@@ -1601,15 +1600,14 @@
             </div>
             <div id="crm-system-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
           </section>
-        </div>
-
-        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+        </div></div>
+        <details id="dealer-tags" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <summary class="cursor-pointer px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <span class="material-symbols-outlined text-pink-500 text-[20px]">auto_awesome</span>
-            <h4 class="font-black text-slate-800">五大標籤</h4>
-          </div>
+            <h4 class="font-black text-slate-800">五大標籤 ▾</h4>
+          </summary>
           <div id="crm-fate-grid" class="p-4 flex gap-3 overflow-x-auto text-sm"></div>
-        </section>
+        </details>
       </div>
       <div class="px-6 py-4 bg-white border-t border-slate-200 flex justify-between gap-3">
         <button type="button" onclick="openCrmOrganizationRoot()" class="px-5 py-2.5 text-sm font-bold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 flex items-center gap-2">
@@ -3765,7 +3763,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
     function fillDistributorCrm(user = {}) {
       const id = getUserId(user);
-      const sponsor = getSponsorUser(user);
+      const inviteId = user.referrerId || user.referrer_id || '';
+      const inviter = inviteId ? findAdminUser(inviteId) : null;
       const placement = getPlacementUser(user);
       const progress = getQualificationProgress(user);
       const fee = getAnnualFeeStatus(user);
@@ -3779,7 +3778,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const dealerProfile = readDealerProfile(user);
 
       document.getElementById('crm-modal-title').innerText = `${user.name || '未命名'} 的經銷商 CRM`;
-      document.getElementById('crm-modal-subtitle').innerText = id;
+      document.getElementById('crm-modal-subtitle').innerText = [user.companyName, '會員編號 ' + (user.memberNumber || user.member_number || '尚未配發')].filter(Boolean).join(' · ');
       setInputValue('crm-user-id', id);
       setInputValue('crm-name', user.name || '');
       setInputValue('crm-phone', user.phone || '');
@@ -3795,10 +3794,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       window.MemberNumber.fill(user, allUsersData);
       setInputValue('crm-expire-at', String(user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '').slice(0, 10));
       setInputValue('crm-tags', user.tags || user.crmTags || '');
-      setInputValue('crm-last-contact', String(user.lastContactAt || '').slice(0, 10));
-      setInputValue('crm-next-follow', String(user.nextFollowUpAt || '').slice(0, 10));
-      setInputValue('crm-owner', user.followOwner || user.crmOwner || adminProfile?.displayName || adminProfile?.name || '');
-      setInputValue('crm-notes', user.crmNotes || user.notes || '');
       setInputValue('crm-kyc-status', dealerProfile.kycStatus || 'draft');
       setInputValue('crm-dealer-type', dealerProfile.dealerType || 'individual');
       setInputValue('crm-tax-id', dealerProfile.taxId || user.taxId || '');
@@ -3837,9 +3832,9 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       document.getElementById('crm-fate-grid').innerHTML = renderAdminFateGrid(user);
 
       document.getElementById('crm-org-grid').innerHTML = [
-        crmInfoItem('會員編號', id),
+        crmInfoItem('LINE UID', id),
         crmInfoItem('角色 / 階級', role),
-        crmInfoItem('推薦人', sponsor ? `${sponsor.name || '未命名'} / ${readSponsorId(user)}` : readSponsorId(user) || '未指定'),
+        crmInfoItem('掃碼結緣人（加入來源）', inviter ? `${inviter.name || '未命名'} / ${inviteId}` : inviteId || '未指定'),
         crmInfoItem('安置上線', placement ? `${placement.name || '未命名'} / ${readPlacementParentId(user)}` : readPlacementParentId(user) || '未指定'),
         crmInfoItem('安置位置', readPlacementSide(user) || '未指定'),
         crmInfoItem('直推人數', `${directCount} 人`),
@@ -3850,6 +3845,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       document.getElementById('crm-finance-grid').innerHTML = [
         crmInfoItem('年費狀態', fee.text),
         crmInfoItem('年費備註', fee.detail),
+        crmInfoItem('最近訂單業績認列', !order ? '尚無訂單' : order.bonusPolicyType === 'signed_referral_pending' ? '待核對簽署資料' : order.raw?.signedReviewKey ? '已核對推薦人' : '請查看訂單紀錄'),
         crmInfoItem('最近訂單', order?.orderId || '尚無'),
         crmInfoItem('最近付款', order?.paidAt ? formatDisplayTime(order.paidAt) : '-'),
         crmInfoItem('累計獎金', formatCurrency(user.totalBonus || user.bonusTotal || 0)),
@@ -3883,6 +3879,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       currentDistributorCrmUserId = getUserId(user);
       document.getElementById('crm-point-details').open = false;
       fillDistributorCrm(user);
+      DealerWorkspace.open(user, currentDistributorCrmUserId);
       window.resetCrmCardLink?.(user);
       const modal = document.getElementById('modal-distributor-crm');
       modal.classList.remove('hidden');
@@ -3894,6 +3891,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       modal.classList.add('hidden');
       modal.classList.remove('flex');
       currentDistributorCrmUserId = '';
+      DealerWorkspace.close();
       window.resetCrmCardLink?.(null);
     }
 
@@ -3918,10 +3916,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         referrerId: document.getElementById('crm-referrer-id')?.value || '',
         annualFeeExpireAt: document.getElementById('crm-expire-at')?.value || '',
         tags: document.getElementById('crm-tags')?.value || '',
-        lastContactAt: document.getElementById('crm-last-contact')?.value || '',
-        nextFollowUpAt: document.getElementById('crm-next-follow')?.value || '',
-        followOwner: document.getElementById('crm-owner')?.value || '',
-        crmNotes: document.getElementById('crm-notes')?.value || '',
         dealerProfile: {
           kycStatus: getInputValue('crm-kyc-status'),
           dealerType: getInputValue('crm-dealer-type'),
@@ -3954,7 +3948,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         const idx = allUsersData.findIndex(u => normalizeLineId(getUserId(u)) === normalizeLineId(userId));
         if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload, ...(res.info || res.data?.info || {}) };
         renderUsersTable(allUsersData);
-        fillDistributorCrm(allUsersData[idx] || payload);
+        if (currentDistributorCrmUserId === userId) fillDistributorCrm(allUsersData[idx] || payload);
         showToast('CRM 已儲存');
       }
     }
@@ -5809,5 +5803,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     <link rel="stylesheet" href="css/activity-checkin.css?v=1">
     <script src="js/modules/activity-checkin.js?v=1"></script>
     <script src="js/modules/admin-activity-registration.js?v=11"></script>
+<script src="js/modules/dealer-workspace.js?v=1"></script>
 </body>
 </html>

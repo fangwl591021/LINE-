@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { dealerCrmFollowups } from './worker/dealer-crm-followups.mjs';
 import { deliverMemberCredits, verifyRegistrationActor, writeRegistrationWithCredits } from './worker/member-shopping-credit.mjs';
 import { findMemberReferrer } from './worker/member-number.mjs';
 import { createTenantReceivable, markPartnerV2OrderPaid, updatePartnerV2OrderStatus } from './worker/partner-bonus-v2.mjs';
@@ -230,6 +231,8 @@ const ACTION_POLICIES = {
   getAllActivities: { access: 'manager', tenantScoped: true },
 
   updateUserRole: { access: 'admin' },
+  adminListDealerFollowups: { access: 'admin' },
+  adminAppendDealerFollowup: { access: 'admin' },
   adminSyncBoundCardUser: { access: 'admin', allowD1Fallback: true },
   adminSearchCrmCards: { access: 'admin' },
   adminLinkCrmCard: { access: 'admin' },
@@ -17375,6 +17378,9 @@ async function dispatchAction(action, payload, request, env) {
         cardAccess: card => D1ReadModule.inferCardAccess(card),
         reservedPhones: SecurityModule.hardAdminAccounts.flatMap(account => account.phones || [])
       });
+    case 'adminListDealerFollowups':
+    case 'adminAppendDealerFollowup':
+      return dealerCrmFollowups(action, payload, actor, env.ACTMASTER_DB);
     case 'adminSyncBoundCardUser': {
       try {
         const profile = {
