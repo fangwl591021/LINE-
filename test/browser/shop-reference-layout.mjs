@@ -103,11 +103,11 @@ async function assertLayout(page,{directory=false}={}){
     const grid=root.querySelector('.shop-explore-grid'),cards=grid?[...grid.children].filter(visible):[];
     const top=document.querySelector('#top-nav'),oldBottom=document.querySelector('#bottom-nav');
     const stats=[...root.querySelectorAll('.mw-stat')].filter(visible).map(n=>{const value=n.querySelector('strong'),cell=n.getBoundingClientRect(),text=value.getBoundingClientRect();return {value:value.textContent,cellLeft:cell.left,cellRight:cell.right,textLeft:text.left,textRight:text.right};});
-    return {overflow:document.documentElement.scrollWidth>innerWidth+1,sharedHeaderHidden:style(top).display==='none',sharedBottomHidden:style(oldBottom).display==='none',controls,stats,columns:cards.length>1?Math.abs(cards[0].getBoundingClientRect().top-cards[1].getBoundingClientRect().top)<2:null,images:directory?[...root.querySelectorAll('.shop-explore-photo img')].map(n=>style(n).objectFit):[]};
+    return {width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth+1,sharedHeaderHidden:style(top).display==='none',sharedBottomHidden:style(oldBottom).display==='none',controls,stats,columns:grid?style(grid).gridTemplateColumns.split(/\s+/).length:0,firstRowCards:cards.length?cards.filter(n=>Math.abs(n.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<2).length:0,images:directory?[...root.querySelectorAll('.shop-explore-photo img')].map(n=>style(n).objectFit):[]};
   },{directory});
   assert.equal(result.overflow,false,'no horizontal overflow');assert.equal(result.sharedHeaderHidden,true,'shared header hidden in mall');assert.equal(result.sharedBottomHidden,true,'shared bottom does not cover reference layout');
   const small=result.controls.filter(n=>n.h<43.5||n.w<43.5);assert.deepEqual(small,[],'visible buttons keep 44px touch targets');
-  if(directory){assert.equal(result.columns,true,'shop cards use two columns');assert.ok(result.images.every(fit=>fit==='contain'),'shop images preserve complete content');}
+  if(directory){const expected=result.width>=700?3:2;assert.equal(result.columns,expected,'mobile uses two columns and desktop uses three');assert.equal(result.firstRowCards,expected,'card geometry matches the responsive grid');assert.ok(result.images.every(fit=>fit==='contain'),'shop images preserve complete content');}
   else assert.deepEqual(result.stats.filter(s=>s.textLeft<s.cellLeft-.5||s.textRight>s.cellRight+.5),[],'merchant values and units remain inside their own stat cells');
   await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));await settle(page);
   const overlap=await page.evaluate(()=>{
@@ -128,7 +128,7 @@ async function run(){
         await f.page.locator('.shop-explore-view').waitFor();await f.page.locator('.shop-explore-card').first().waitFor();await f.page.locator('[data-explore-balance]').filter({hasText:'9,970'}).waitFor();
         await f.page.screenshot({path:join(OUT,`explore-${width}.png`),fullPage:true});try{await assertLayout(f.page,{directory:true});}catch(error){layoutIssues.push({view:'explore',width,message:error.message,actual:error.actual});}
         assert.equal(await f.page.getByText('依店家設定',{exact:true}).count(),shops.length,'no invented redemption percentages');
-        await assertClean(f);results.push({view:'explore',width,overflow:false,twoColumns:true});
+        await assertClean(f);results.push({view:'explore',width,overflow:false,columns:width>=700?3:2});
       }finally{await f.close();}
       const m=await createFixture(browser,{width,role:'store'});
       try{

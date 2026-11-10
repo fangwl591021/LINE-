@@ -8,5 +8,5 @@
 - 必讀：DESIGN、store-shop、store-cooperation-plans、core-invariants、feature-change-protocol、line-release-verification。
 - 修改：兩個呈現模組與三份隔離CSS、商城整合及三個入口快取；同步DESIGN、商城契約與受影響的呈現測試。贈點單位、公司商品上架及跨店找商品仍有明確入口。Worker與後端檔案未修改。
 - 驗證：完整 `node tools/run-change-guard.js after` PASS（repo外shop-reference-guard-after.log）；新版呈現12項、舊入口/分類/照片/方案/贈點測試通過。舊結構斷言依已核准版型更新，身份、所有權、商品圖片完整與交易保護保留。
-- 瀏覽器：`node test/browser/shop-reference-layout.mjs` PASS。320/390/1280兩頁無橫向溢出，兩欄卡片與圖片完整、各可見按鈕至少44px，原外層導覽隱藏並可恢復。一般/贈點/扣點/店長/管理員、真0/載入失敗、搜尋分類新上架收藏排序、QR/訂單/商品管理/交易明細/教學/本人聯絡人與帳號切換遲到回應均通過。productionRequests=0、apiWrites=0；截圖與log留repo外。
+- 瀏覽器：`node test/browser/shop-reference-layout.mjs` PASS。320/390/1280兩頁無橫向溢出，手機兩欄/桌面三欄卡片與圖片完整、各可見按鈕至少44px，原外層導覽隱藏並可恢復。一般/贈點/扣點/店長/管理員、真0/載入失敗、搜尋分類新上架收藏排序、QR/訂單/商品管理/交易明細/教學/本人聯絡人與帳號切換遲到回應均通過。productionRequests=0、apiWrites=0；截圖與log留repo外。
 - 限制：合成瀏覽器驗證不代表真人LINE手機或正式贈扣點驗收。會員數/導客數/到期日未有資料來源，改用明確標示的商品數與成功商品QR月折抵摘要；無資料顯示尚無資料。
