@@ -271,6 +271,7 @@
   </style>
 <link rel="stylesheet" href="css/contract-organization.css?v=3">
 <script src="js/modules/contract-organization.js?v=3" defer></script>
+<link rel="stylesheet" href="css/home-discovery-20261110.css?v=1">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -1224,6 +1225,10 @@
     </div>
 
     <!-- ==================== 首頁 ==================== -->
+    <header id="home-discovery-header" class="home-discovery-header">
+      <div class="home-discovery-brand"><img src="assets/points-logo-transparent-20260916.png" alt=""><span><strong>點數通</strong><small>讓購物金流動，讓生意跟著流動</small></span></div>
+      <button type="button" onclick="window.openStoreShop?.()" aria-label="開啟店家專區"><span class="material-symbols-outlined" aria-hidden="true">storefront</span> 店家專區 ›</button>
+    </header>
           <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
         <div class="grid grid-cols-4 overflow-hidden bg-gradient-to-r from-[#36b86c] via-[#20a95e] to-[#087d4d] text-white">
           <button id="home-profile-avatar-button" type="button" data-home-top-action="profile" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="home-top-shortcut flex-col gap-1 border-r border-white/25 px-2 text-center">
@@ -1329,6 +1334,14 @@
 
       <div id="home-system-ticker" class="hidden mx-0 mt-4 overflow-hidden bg-amber-50 border-y border-amber-100"><div class="flex items-center gap-3 px-5 py-3 text-[13px] font-bold text-amber-800"><span class="material-symbols-outlined shrink-0 text-[20px]">campaign</span><div class="min-w-0 flex-1 overflow-hidden"><div id="home-system-ticker-text" class="inline-block whitespace-nowrap pr-8"></div></div></div></div>
 
+      <section id="home-shop-categories" class="home-shop-categories" aria-label="探索好店分類">
+        <button type="button" onclick="window.openHomeShopCategory('食')"><span>🍴</span><strong>餐飲食品</strong></button>
+        <button type="button" onclick="window.openHomeShopCategory('服務')"><span>✂</span><strong>專業服務</strong></button>
+        <button type="button" onclick="window.openHomeShopCategory('購')"><span>🛒</span><strong>購物零售</strong></button>
+        <button type="button" onclick="window.openHomeShopCategory('宿')"><span>🛏</span><strong>住宿</strong></button>
+        <button type="button" onclick="window.openHomeShopCategory('遊')"><span>☀</span><strong>旅遊休閒</strong></button>
+        <button type="button" onclick="window.openHomeShopCategory('')"><span>•••</span><strong>更多分類</strong></button>
+      </section>
       <div id="home-primary-shortcuts" class="mx-0 -mt-px bg-white px-2 pt-0 pb-4 shadow-sm">
         <div class="grid grid-cols-4 gap-y-4 gap-x-1">
           <button onclick="window.goPage('card')" class="home-quick-circle group">
@@ -1377,8 +1390,9 @@
         </button>
       </div>
 
-      <button id="home-mall-banner" type="button" onclick="window.openStoreShop()" aria-label="點數通：立即進入商城">
-        <img src="assets/points-mall-banner-20260916.png" width="2170" height="725" alt="點數通，把消費串起來。購物金、跨店折抵、更多優惠，立即進入商城。" decoding="async">
+      <button id="home-mall-banner" type="button" onclick="window.openHomeShopCategory('')" aria-label="探索合作店家">
+        <img src="assets/home-discover-shops-20261110.webp" width="1200" height="400" alt="" decoding="async">
+        <span class="home-discovery-hero-copy"><strong>探索<span>好店</span></strong><small>找優質合作店家・用購物金更划算</small><b>⌕ 探索合作店家 ›</b></span>
       </button>
 
       <section id="home-network-search-entry" class="mx-0 mt-4 border-y border-emerald-100 bg-white px-4 py-4 shadow-sm">
@@ -1454,7 +1468,7 @@
         </div>
       </section>
 
-      <section class="home-lower-panel mx-0 mt-5 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+      <section id="home-ai-services" class="home-lower-panel mx-0 mt-5 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <h3 class="home-section-kicker">&#65;&#73;&#26381;&#21209;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
           <button type="button" onclick="window.openHomeLowerPanel?.('onboarding')" class="home-quick-circle group">
@@ -1473,6 +1487,7 @@
             <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">mail</span>
             <span class="home-quick-label !text-[13px]">&#25910;&#20449;&#22846;</span>
           </button>
+          <button type="button" onclick="window.openHomeZodiacFortune?.()" class="home-quick-circle group"><span class="home-quick-icon material-symbols-outlined text-amber-500">nights_stay</span><span class="home-quick-label">星座運勢</span></button>
         </div>
         <div id="home-onboarding-ai-list" class="hidden"></div>
         <div id="home-sales-assistant-list" class="hidden"></div>
@@ -1501,7 +1516,7 @@
         </div>
       </section>
 
-      <section class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+      <section id="home-recent-activity" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <h3 class="home-section-kicker">&#36817;&#26399;&#27963;&#21205;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
           <button type="button" onclick="window.openHomeActivityCategory?.('activity')" class="home-quick-circle group">
@@ -2697,6 +2712,13 @@
     <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box" aria-hidden="true"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
   </nav>
 
+  <nav id="home-discovery-bottom" aria-label="首頁導覽">
+    <button type="button" onclick="window.goPage('home')" aria-current="page"><span class="material-symbols-outlined">home</span><small>首頁</small></button>
+    <button type="button" onclick="window.openHomeShopCategory('')"><span class="material-symbols-outlined">storefront</span><small>探索好店</small></button>
+    <button type="button" class="home-bottom-scan" onclick="window.openHomePointAction()"><span class="material-symbols-outlined">qr_code_scanner</span><small>點數 QR／掃碼</small></button>
+    <button type="button" onclick="window.openStoreShop('', '', '', 'point-history')"><span class="material-symbols-outlined">receipt_long</span><small>我的點數</small></button>
+    <button type="button" onclick="window.goPage('admin-settings')"><span class="material-symbols-outlined">person</span><small>我的</small></button>
+  </nav>
   <nav id="bottom-nav-admin" class="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex justify-evenly items-center px-2 py-2 z-[80] pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl hidden">
     <button onclick="window.goPage('admin-activities')" id="admin-nav-btn-admin-activities" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">fact_check</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">核銷</span></button>
     <button onclick="window.goPage('active')"           id="admin-nav-btn-active" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">add_circle</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">建立</span></button>
@@ -2962,7 +2984,7 @@
 <script src="js/modules/store-richman.js?v=1"></script>
 <script src="js/modules/business-island.js?v=13"></script>
 <script src="js/modules/store-invite-route.js?v=1"></script>
-<script src="js/modules/store-shop-entry.js?v=79&org=1&publish=2&game=2&manage=1&richman=1&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=2&newestShops=1&productDefault=1"></script>
+<script src="js/modules/store-shop-entry.js?v=79&org=1&publish=2&game=2&manage=1&richman=1&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=2&newestShops=1&productDefault=1&homeLayout=1"></script>
 <script src="js/modules/reward-applications-entry.js?v=6&contract=11511&tabs=2&reviewNote=2"></script>
 <script src="js/modules/member-cooperation-entry.js?v=4&contract=11511&tabs=2&reviewNote=2"></script>
 <script src="js/modules/partner-contracts-entry.js?v=11510-3&signed=1&contract=11511r2&review=2"></script>
@@ -2987,6 +3009,7 @@
     <script src="js/modules/member-event-dm.js?v=2"></script>
 <script src="js/modules/member-hosted-events.js?v=8"></script>
 <script src="js/modules/home.js?v=8.27"></script>
+<script src="js/modules/home-discovery-20261110.js?v=1"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
 <script src="js/modules/customers.js?v=1.2"></script>

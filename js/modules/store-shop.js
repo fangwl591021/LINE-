@@ -65,7 +65,7 @@
     if(result.release_enabled!==true)return '全站網購交易尚未開放，顧客目前無法下單。店家收款設定已完成，請聯絡管理員確認。';
     return '';
   }
-  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='', applicationReview=null) {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='', applicationReview=null,initialCategory='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
     const initialProductSession=initialPublicProductId?{owner:window.currentUserProfile?.userId,role:window.userRole,token:window.liff?.getAccessToken?.()}:null;
     // New visit, new shuffle. Keep it for category/search/pagination in this mount.
@@ -907,7 +907,7 @@
         }
       }
       else if(!standalone&&section==='discovery')await discover();
-      else if(!standalone&&['partners','list'].includes(section))await list();
+      else if(!standalone&&['partners','list'].includes(section))await list('','',categories.includes(initialCategory)?initialCategory:'');
       else if(!standalone&&section==='point-history'){
         memberHome();
         root.querySelector('.shop-bottom-nav [data-do="spending-history"]').click();

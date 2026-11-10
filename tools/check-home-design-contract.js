@@ -105,11 +105,11 @@ const mallBanner = index.indexOf('id="home-mall-banner"');
 if (!(mallBanner > quickActionsEnd && mallBanner < defaultSearchEntry)) {
   fail('mall banner must appear between the eight shortcuts and network search');
 }
-if (!/id="home-mall-banner"[^>]*type="button"[^>]*onclick="window\.openStoreShop\(\)"/.test(index)) {
+if (!/id="home-mall-banner"[^>]*type="button"[^>]*onclick="window\.openHomeShopCategory\(''\)"/.test(index)) {
   fail('the entire mall banner must use the existing authenticated storefront entry');
 }
-if (!index.includes('src="assets/points-mall-banner-20260916.png" width="2170" height="725"') ||
-    !fs.existsSync(path.join(root, 'assets', 'points-mall-banner-20260916.png'))) {
+if (!index.includes('src="assets/home-discover-shops-20261110.webp" width="1200" height="400"') ||
+    !fs.existsSync(path.join(root, 'assets', 'home-discover-shops-20261110.webp'))) {
   fail('mall banner must use the supplied image with reserved dimensions');
 }
 if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > recurringTasks) {
