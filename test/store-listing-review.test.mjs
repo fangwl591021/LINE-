@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {requireListingReview,ListingReviewError,prepareListingContent,normalizeListingReview,listingCategories,listingPolicyVersion} from '../worker/store-listing-review.mjs';
+import {requireListingReview,ListingReviewError,prepareListingContent,normalizeListingReview,listingCategories,listingPolicyVersion,listingReviewPromptVersion,readListingReviewSnapshot} from '../worker/store-listing-review.mjs';
 import {PartnerDirectoryModule} from '../worker/partner-directory.mjs';
 import {createListingFixture,OWNER,ADMIN,SHOP,PRODUCT} from './fixtures/store-listing-catalog.mjs';
 import {allowListing} from './fixtures/store-listing-review.mjs';
@@ -23,6 +23,58 @@ test('safe coffee, hotel, haircut, nonmedical mask and anti-fraud education are 
   }
   assert.equal(f.count('store_shop_stores'),1);
 });
+test('ordinary health wording, food and environmental cleaning reach the clarified evidence-based review',async t=>{
+  const f=createListingFixture();t.after(f.close);
+  f.state.review=body=>{
+    assert.match(body.instructions,/健康、保養、天然、安心品質、ECO、ALL NATURAL/);
+    assert.match(body.instructions,/家庭環境去味、防霉、除黴、洗衣機清潔除臭是環境清潔用途/);
+    assert.match(body.instructions,/醫院、病房或安寧病房只是使用場景/);
+    assert.match(body.instructions,/只有存在具體政策風險線索但資料不足以核對性質時才 decision=manual/);
+    assert.match(body.instructions,/活化細胞、修護五臟六腑、疾病適用/);
+    return allowListing();
+  };
+  for(const [name,description]of [
+    ['合成健康生活店','天然、健康、安心品質的一般生活用品'],
+    ['一般居家清潔用品','家庭環境去味、防霉、洗衣機除臭；ECO ALL NATURAL'],
+    ['環境除味用品','供家庭、醫院及安寧病房環境去味，非供人體使用'],
+    ['一般食品與保養用品','一般營養食品與日常保養，未宣稱疾病療效']
+  ]){
+    f.resetUsage();const version=f.sql.prepare('SELECT version FROM store_shop_stores').get()?.version||0;
+    assert.equal((await f.call('/store',store({name,description,version}))).http,200);
+  }
+  assert.equal(f.state.providerCalls,4,'ordinary wording still receives all provider policy checks');
+});
+
+test('prompt revisions ignore legacy decision cache while preserving evidence fingerprints and manual records',async t=>{
+  assert.equal(listingPolicyVersion,'2026-10-08-v1');assert.ok(listingReviewPromptVersion);
+  for(const decision of ['reject','manual']){
+    const f=createListingFixture();t.after(f.close);
+    const value={name:'合成健康生活店',description:'一般環境清潔用品',status:'active'},scope='store:'+OWNER;
+    const snapshot=await readListingReviewSnapshot(value,null,f.fetcher);
+    assert.equal(snapshot.hash,'84d4caeb52ad95f76c48a7f0a0497510f5c12b2cbbd9b356ee095dc0c1e29987','original evidence hash remains compatible with existing authorizations');
+    const prior=blocked('medical','name',value.name,decision);
+    f.sql.prepare('INSERT INTO store_listing_reviews(scope,content_hash,policy_version,decision,review_json,actor_uid,reviewed_at) VALUES(?,?,?,?,?,?,?)').run(scope,snapshot.hash,listingPolicyVersion,decision,JSON.stringify(prior),OWNER,Date.now());
+    const legacy=JSON.stringify(f.sql.prepare('SELECT * FROM store_listing_reviews WHERE content_hash=?').get(snapshot.hash));
+    const review=()=>requireListingReview({value,scope,uid:OWNER,env:f.env,fetcher:f.fetcher});
+    assert.equal((await review()).decision,'allow');assert.equal(f.state.providerCalls,1,'the old reject/manual does not suppress a fresh review');
+    assert.equal((await review()).decision,'allow');assert.equal(f.state.providerCalls,1,'the current prompt cache is reusable without another attempt');
+    const saved=f.sql.prepare("SELECT content_hash FROM store_listing_reviews WHERE decision='allow'").get();assert.notEqual(saved.content_hash,snapshot.hash);
+    assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_listing_reviews WHERE content_hash=?').get(snapshot.hash)),legacy,'legacy records remain available to the pinned manual exception');
+    assert.equal((await readListingReviewSnapshot(value,null,f.fetcher)).hash,snapshot.hash);assert.equal(f.count('store_listing_reviews'),2);
+  }
+});
+
+test('concrete organ-repair and disease claims remain blocked or manual after prompt clarification',async t=>{
+  for(const decision of ['reject','manual']){
+    const f=createListingFixture();t.after(f.close);
+    const description='噴劑用於眼鼻口，宣稱活化細胞、修護五臟六腑及疾病適用';
+    f.state.review=()=>blocked('medical','description',description,decision);
+    const result=await f.call('/store',store({description}));
+    assert.equal(result.http,422);assert.equal(result.code,decision==='reject'?'LISTING_POLICY_REJECTED':'LISTING_REVIEW_REQUIRED');
+    assert.equal(f.count('store_shop_stores'),0);assert.equal(f.state.providerCalls,1);
+  }
+});
+
 test('explicit prohibited sales cannot be allowed by provider or client approval',async t=>{
   const f=createListingFixture();t.after(f.close);
   for(const description of ['販售電子菸','買賣人頭帳戶','性交易服務','販售醫用口罩','線上賭場']){
