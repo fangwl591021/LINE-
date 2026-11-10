@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {requireListingReview,ListingReviewError,prepareListingContent,normalizeListingReview,listingCategories,listingPolicyVersion,listingReviewPromptVersion,readListingReviewSnapshot} from '../worker/store-listing-review.mjs';
 import {PartnerDirectoryModule} from '../worker/partner-directory.mjs';
 import {createListingFixture,OWNER,ADMIN,SHOP,PRODUCT} from './fixtures/store-listing-catalog.mjs';
@@ -8,6 +9,7 @@ const store=(extra={})=>({name:'合成咖啡店',description:'咖啡與手作蛋
 const product=(extra={})=>({title:'咖啡',description:'手沖咖啡',price_cents:10000,redeem_type:'none',redeem_value:0,purchase_mode:'in_store',category:'食',status:'active',request_key:crypto.randomUUID(),...extra});
 const blocked=(category,field,evidence,decision='reject',imageCount=0)=>({decision,checked_categories:[...listingCategories],image_count:imageCount,issues:[{category,field,evidence,reason:'此內容屬平台禁止上架範圍，需核對。'}]});
 const cases=[['adult_industry','歡樂陪侍酒吧'],['fraud','保證投資月收益百分之五十'],['tobacco_alcohol','進口葡萄酒專卖'],['medical','醫療用器材耗材店'],['crime','購買假證件服務'],['sexual','成人色情影像訂閱'],['gambling','娛樂城投注平台'],['other','危險商品交易服務']];
+const catalogState=f=>JSON.stringify(['users','store_shop_stores','store_shop_products','store_catalog_admin_audit','store_admin_product_audit'].map(table=>f.sql.prepare('SELECT * FROM '+table).all()));
 for(const [category,name]of cases)test('synthetic provider rejects policy category '+category+' without publishing',async t=>{
   const f=createListingFixture();t.after(f.close);f.state.review=()=>blocked(category,'name',name);
   const result=await f.call('/store',store({name,approval:'allow',review:{decision:'allow'},clientOpenAIKey:'ignored'}));
@@ -43,6 +45,101 @@ test('ordinary health wording, food and environmental cleaning reach the clarifi
     assert.equal((await f.call('/store',store({name,description,version}))).http,200);
   }
   assert.equal(f.state.providerCalls,4,'ordinary wording still receives all provider policy checks');
+});
+
+test('synthetic ordinary food, supplement and daily-care allowances reach the real product route without keyword rejection',async t=>{
+  // These deterministic provider decisions exercise routing and prompt delivery,
+  // not the accuracy of a live model's policy judgments.
+  const f=createListingFixture({existing:true});t.after(f.close);
+  const descriptions=[
+    '一般非藥品保健食品，營養補充、維持正常機能與順暢；餐前每日１份，兒童半份。',
+    '一般食品，早餐飲品，每日依標示份量食用。',
+    '日常身體保養與清潔，未宣稱疾病治療用途。',
+    '居家日用品，供家庭環境去味，非供人體醫療使用。'
+  ];
+  f.state.review=body=>{assert.equal(body.max_output_tokens,6000);assert.match(body.instructions,/保健食品/);assert.match(body.instructions,/兒童/);assert.match(body.instructions,/manual/);return allowListing();};
+  for(const description of descriptions){
+    f.resetUsage();const version=f.sql.prepare('SELECT version FROM store_shop_products WHERE id=?').get(PRODUCT).version;
+    const result=await f.call('/product',product({id:PRODUCT,version,title:'合成一般營養與生活用品',description}));
+    assert.equal(result.http,200);assert.equal(f.sql.prepare('SELECT description FROM store_shop_products WHERE id=?').get(PRODUCT).description,description);
+    assert.equal(JSON.parse(f.state.requests.at(-1).input[0].content[0].text).description,description);
+  }
+  assert.equal(f.state.providerCalls,descriptions.length,'all categories and images still require the provider review');
+});
+
+const anchoredCases=[
+  ['full-width letters','說明：維他命Ｃ可修復器官。','維他命C可修復器官','維他命Ｃ可修復器官'],
+  ['full-width punctuation','說明：（宣稱治療糖尿病）。','(宣稱治療糖尿病)','（宣稱治療糖尿病）'],
+  ['Unicode whitespace','說明：治療\u00a0糖尿病\u3000及\t器官修復。','治療糖尿病 及器官修復','治療\u00a0糖尿病\u3000及\t器官修復'],
+  ['UTF-16 prefix','🧴說明：宣稱治療　糖尿病。','治療糖尿病','治療　糖尿病'],
+  ['whole compatibility expansion','產品宣稱30℃可修復器官。','30°C可修復器官','30℃可修復器官']
+];
+for(const [name,description,evidence,original]of anchoredCases)test('real administrator route anchors '+name+' to exact source evidence and reuses the persisted manual review',async t=>{
+  const f=createListingFixture({existing:true});t.after(f.close);f.sql.prepare("UPDATE store_shop_products SET status='draft' WHERE id=?").run(PRODUCT);
+  const before=catalogState(f);
+  f.state.review=()=>({...blocked('medical','description',evidence,'manual'),issues:[{category:'medical',field:'description',evidence,reason:'含疾病治療或器官修復宣稱，需人工核對產品用途。'}]});
+  const payload={type:'product',id:PRODUCT,shop_id:SHOP,shop_version:1,version:1,request_key:crypto.randomUUID(),changes:{description,status:'active'}};
+  for(let repeat=0;repeat<2;repeat++){
+    const result=await f.call('/admin/catalog',payload,ADMIN);assert.equal(result.http,422);assert.equal(result.code,'LISTING_REVIEW_REQUIRED');assert.equal(result.review.decision,'manual');
+    assert.equal(result.review.issues[0].field,'description');assert.equal(result.review.issues[0].evidence,original);assert.ok(description.includes(result.review.issues[0].evidence));assert.match(result.review.issues[0].reason,/疾病治療|器官修復/);
+    assert.equal(catalogState(f),before,'review does not publish, audit a catalog save, change roles or touch points');
+  }
+  const saved=f.sql.prepare('SELECT decision,review_json FROM store_listing_reviews').get();assert.equal(saved.decision,'manual');assert.equal(JSON.parse(saved.review_json).issues[0].evidence,original);
+  assert.equal(f.state.providerCalls,1);assert.equal(f.sql.prepare('SELECT attempts FROM store_listing_review_usage').get().attempts,1);
+});
+
+const unanchoredCases=[
+  ['invented treatment','一般營養補充','治療癌症'],
+  ['changed negation','不供醫療用途','可供醫療用途'],
+  ['different numeric value','每日１份可修復器官','每日2份可修復器官'],
+  ['traditional-to-simplified rewriting','宣稱治療糖尿病','宣称治疗糖尿病'],
+  ['removed punctuation','不，提供治療服務','不提供治療服務'],
+  ['omitted words','治療說法尚待核對，糖尿病不在用途內','治療糖尿病'],
+  ['omission marker','宣稱治療多種情況以及糖尿病','治療…糖尿病'],
+  ['partial compatibility expansion','產品宣稱30℃可修復器官','C可修復器官'],
+  ['partial parenthesized expansion','㈱宣稱治療糖尿病','株宣稱治療糖尿病'],
+  ['wrong field','宣稱治療糖尿病','治療糖尿病','title']
+];
+for(const [name,description,evidence,field='description']of unanchoredCases)test('unanchored '+name+' remains an incomplete service result, never an allowance or content verdict',async t=>{
+  const f=createListingFixture({existing:true});t.after(f.close);const before=catalogState(f);
+  f.state.review=()=>blocked('medical',field,evidence,'manual');
+  const result=await f.call('/product',product({id:PRODUCT,version:1,description}));
+  assert.equal(result.http,503);assert.equal(result.code,'LISTING_REVIEW_INCOMPLETE');assert.equal(result.review,undefined);assert.match(result.error,/尚未判定違規/);
+  assert.equal(f.count('store_listing_reviews'),0);assert.equal(catalogState(f),before);
+});
+
+test('reanchoring keeps evidence/reason bounds and rejects oversized raw spans before caching',async t=>{
+  for(const [description,evidence,reason]of [
+    ['證'.repeat(301),'證'.repeat(301),'需要核對用途。'],
+    ['治療糖尿病','治療糖尿病','理由'.repeat(141)],
+    ['治療'+'\u2003'.repeat(301)+'糖尿病','治療糖尿病','需要核對疾病宣稱。']
+  ]){
+    const f=createListingFixture();t.after(f.close);f.state.review=()=>({...blocked('medical','description',evidence,'manual'),issues:[{category:'medical',field:'description',evidence,reason}]});
+    const result=await f.call('/store',store({description}));assert.equal(result.http,503);assert.equal(result.code,'LISTING_REVIEW_INCOMPLETE');assert.equal(f.count('store_listing_reviews'),0);assert.equal(f.count('store_shop_stores'),0);
+  }
+});
+
+test('reanchored evidence cannot become its own reason or create a review cache entry',async t=>{
+  const f=createListingFixture();t.after(f.close);
+  f.state.review=()=>({...blocked('other','description','AI','manual'),issues:[{category:'other',field:'description',evidence:'AI',reason:'ＡＩ'}]});
+  for(let repeat=0;repeat<2;repeat++){
+    f.resetUsage();const result=await f.call('/store',store({description:'ＡＩ'}));
+    assert.equal(result.http,503);assert.equal(result.code,'LISTING_REVIEW_INCOMPLETE');assert.equal(result.review,undefined);assert.equal(f.count('store_listing_reviews'),0);assert.equal(f.count('store_shop_stores'),0);
+  }
+  assert.equal(f.state.providerCalls,2,'an invalid normalized result is never reused as a cached content verdict');
+});
+
+test('the prior v1 prompt namespace is invalidated without changing the pinned content fingerprint or old manual record',async t=>{
+  const f=createListingFixture();t.after(f.close);const value=store({name:'合成保健食品店',description:'一般營養補充'}),scope='store:'+OWNER;
+  const snapshot=await readListingReviewSnapshot(value,null,f.fetcher),oldHash=createHash('sha256').update(JSON.stringify({content_hash:snapshot.hash,prompt:'2026-11-10-v1'})).digest('hex');
+  const prior=blocked('medical','description',value.description,'manual');
+  f.sql.prepare('INSERT INTO store_listing_reviews(scope,content_hash,policy_version,decision,review_json,actor_uid,reviewed_at) VALUES(?,?,?,?,?,?,?)').run(scope,oldHash,listingPolicyVersion,'manual',JSON.stringify(prior),OWNER,Date.now());
+  const oldRow=JSON.stringify(f.sql.prepare('SELECT * FROM store_listing_reviews WHERE content_hash=?').get(oldHash));
+  assert.notEqual(listingReviewPromptVersion,'2026-11-10-v1');
+  const review=()=>requireListingReview({value,scope,uid:OWNER,env:f.env,fetcher:f.fetcher});
+  assert.equal((await review()).decision,'allow');assert.equal((await review()).decision,'allow');assert.equal(f.state.providerCalls,1);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_listing_reviews WHERE content_hash=?').get(oldHash)),oldRow);assert.equal(f.count('store_listing_reviews'),2);
+  assert.equal((await readListingReviewSnapshot(value,null,f.fetcher)).hash,snapshot.hash);assert.equal(listingPolicyVersion,'2026-10-08-v1');
 });
 
 test('prompt revisions ignore legacy decision cache while preserving evidence fingerprints and manual records',async t=>{
