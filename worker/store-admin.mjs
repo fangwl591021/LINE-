@@ -1,6 +1,7 @@
 // Administrator directory: bounded reads only, with no catalog/points/order mutations.
 import {adminPartnerShops,mergeShopPages} from './store-partner-catalog.mjs';
 import {retailRoleSql} from '../js/modules/store-cooperation-plans.mjs';
+import {storePinningEnabled} from './store-pinning-state.mjs';
 const PATH = '/v1/store-shop/admin/stores';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -110,24 +111,25 @@ const OWNER_JOIN = 'LEFT JOIN users o ON o.line_id=s.owner_uid';
 const FILTER = "(?='' OR s.status=?) AND (?='' OR instr(lower(s.name),lower(?))>0 OR instr(lower(s.category),lower(?))>0 OR instr(lower(s.address),lower(?))>0 OR instr(lower(s.phone),lower(?))>0 OR instr(lower(COALESCE(o.name,'')),lower(?))>0)";
 const filterArgs = ({ status, q }) => [status, status, q, q, q, q, q, q];
 
-async function directory(db, filter) {
+async function directory(db, filter, pinning=false) {
   const fields = `s.id,substr(s.name,1,80) AS name,substr(s.category,1,40) AS category,s.status,substr(s.address,1,200) AS address,substr(s.phone,1,40) AS phone,s.owner_uid,substr(COALESCE(o.name,''),1,120) AS owner_name,substr(COALESCE(o.role,''),1,24) AS owner_role,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived') AS product_count,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active') AS active_product_count,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active' AND p.purchase_mode='online') AS online_product_count,
-    (s.status='active' AND ${retailRoleSql('o.role')}) AS public_visible`;
+    (s.status='active' AND ${retailRoleSql('o.role')}) AS public_visible${pinning?",COALESCE(dp.pinned,0) AS pinned,COALESCE(dp.version,0) AS pin_version,'shop' AS pin_source":''}`;
+  const pinJoin=pinning?" LEFT JOIN store_catalog_pins dp ON dp.source='shop' AND dp.entity_id=s.id":'';
   // A read-only batch keeps the displayed totals and current page on the same snapshot.
   const results = await db.batch([
     db.prepare("SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM store_shop_stores"),
     db.prepare(`SELECT count(*) AS total FROM store_shop_stores s ${OWNER_JOIN} WHERE ${FILTER}`).bind(...filterArgs(filter)),
-    db.prepare(`SELECT ${fields} FROM store_shop_stores s ${OWNER_JOIN} WHERE ${FILTER} AND s.id>? ORDER BY s.id LIMIT 21`).bind(...filterArgs(filter), filter.after)
+    db.prepare(`SELECT ${fields} FROM store_shop_stores s ${OWNER_JOIN}${pinJoin} WHERE ${FILTER} AND s.id>? ORDER BY s.id LIMIT 21`).bind(...filterArgs(filter), filter.after)
   ]);
   if (results.length !== 3 || results.some(result => result.success === false || !Array.isArray(result.results))) throw new Error('Directory read unavailable');
-  const partners=await adminPartnerShops(db,filter);
+  const partners=await adminPartnerShops(db,filter,pinning);
   const summary = results[0].results[0], total = results[1].results[0]?.total, page = mergeShopPages(results[2].results,partners.shops);
   if (!summary || !Number.isSafeInteger(total)) throw new Error('Directory totals unavailable');
   for(const key of ['total','active','draft'])summary[key]+=partners.summary[key];
-  return { success: true, shops: page.slice(0, PAGE_SIZE).map(shop => ({ ...shop, public_visible: !!shop.public_visible })), next: page.length > PAGE_SIZE ? page[PAGE_SIZE - 1].id : '', summary, filtered_total: total+partners.total };
+  return { success: true, ...(pinning?{pinning_enabled:true}:{}), shops: page.slice(0, PAGE_SIZE).map(shop => ({ ...shop, public_visible: !!shop.public_visible,...(pinning?{pinned:shop.pinned===1}:{}) })), next: page.length > PAGE_SIZE ? page[PAGE_SIZE - 1].id : '', summary, filtered_total: total+partners.total };
 }
 
 export async function handleStoreAdmin(request, env, profileMapper, fetcher = fetch) {
@@ -140,7 +142,7 @@ export async function handleStoreAdmin(request, env, profileMapper, fetcher = fe
     if (!env.ACTMASTER_DB || typeof profileMapper !== 'function') throw new Error('Directory unavailable');
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     await adminActor(db, uid, profileMapper);
-    return reply(await directory(db, filter));
+    return reply(await directory(db, filter,storePinningEnabled(env)));
   } catch (error) {
     if (error instanceof DirectoryError) return reply({ success: false, code: error.code, error: error.message }, error.status);
     return reply({ success: false, code: 'DIRECTORY_UNAVAILABLE', error: '店家列表暫時無法讀取，請稍後重試' }, 503);

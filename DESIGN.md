@@ -17,6 +17,8 @@
 
 改樣式前先確認 selector、目前頁面 class、載入順序及元件 CSS。`css/styles.css` 的全域背景不等於每頁最終背景；不要用未限定範圍的 `body`、`button`、`img` 覆寫所有頁面。
 
+管理員店家列表的「置頂」勾選區至少44px高；儲存失敗顯示原因，結果未知提供重試。店家卡在手機保持可操作，不改公開資格。
+
 商城一般入口會同時套用上述兩個主題 class。`store-shop.css` 前段 `.store-shop` 的 `900px` 最大寬、`#f4f7f6` 背景、`16px` 內距是未套主題的基礎 fallback；目前入口以後段 `.store-shop.shop-points-theme` 及各子元件規則為準，不能只讀前段數值。
 
 ## 現有色彩與字體

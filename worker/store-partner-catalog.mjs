@@ -19,19 +19,22 @@ export async function newestPartnerShops(db){
       WHERE c.status='active' AND ${complete} ORDER BY discovery_published_at DESC,c.id DESC LIMIT 3`);
   } catch(error){if(missing(error))return [];throw error;}
 }
-export async function publicPartnerShops(db,{id='',q='',after='',category='',order=catalogOrder('',after)}={}){
+export async function publicPartnerShops(db,{id='',q='',after='',category='',pinning=false,order=catalogOrder('',after,pinning)}={}){
   try{
-    return await read(db,`SELECT *${order.select('id')} FROM (${catalog}) WHERE status='active' AND ${complete} AND (?='' OR id=?) AND ${order.where('id')} AND (instr(name,?)>0 OR instr(category,?)>0 OR instr(address,?)>0) AND (?='' OR category=?) ORDER BY ${order.by('id')} LIMIT 41`,[id,id,...order.args,q,q,q,category,category]);
+    const join=pinning?" c LEFT JOIN store_catalog_pins cp ON cp.source='partner' AND cp.entity_id='partner_'||replace(c.id,'-','')":'';
+    return await read(db,`SELECT ${pinning?'c.*':'*'}${order.select('id')} FROM (${catalog})${join} WHERE status='active' AND ${complete} AND (?='' OR id=?) AND ${order.where('id')} AND (instr(name,?)>0 OR instr(category,?)>0 OR instr(address,?)>0) AND (?='' OR category=?) ORDER BY ${order.by('id')} LIMIT 41`,[id,id,...order.args,q,q,q,category,category]);
   }catch(error){if(missing(error))return [];throw error;}
 }
-export async function adminPartnerShops(db,{q='',status='',after=''}){
+export async function adminPartnerShops(db,{q='',status='',after=''},pinning=false){
   const filter="(?='' OR status=?) AND (?='' OR instr(lower(name),lower(?))>0 OR instr(lower(category),lower(?))>0 OR instr(lower(address),lower(?))>0 OR instr(phone,?)>0)";
   const args=[status,status,q,q,q,q,q];
+  const join=pinning?" c LEFT JOIN store_catalog_pins cp ON cp.source='partner' AND cp.entity_id='partner_'||replace(c.id,'-','')":'';
+  const pins=pinning?",COALESCE(cp.pinned,0) AS pinned,COALESCE(cp.version,0) AS pin_version,'partner' AS pin_source":'';
   try{
     const results=await db.batch([
       db.prepare(`SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM (${catalog})`),
       db.prepare(`SELECT count(*) AS total FROM (${catalog}) WHERE ${filter}`).bind(...args),
-      db.prepare(`SELECT id,name,category,status,address,phone,'' AS owner_uid,'管理員代建（未綁定帳號）' AS owner_name,'' AS owner_role,0 AS product_count,0 AS active_product_count,0 AS online_product_count,1 AS listing_only,(status='active' AND ${complete}) AS public_visible FROM (${catalog}) WHERE ${filter} AND id>? ORDER BY id LIMIT 21`).bind(...args,after)
+      db.prepare(`SELECT id,name,category,status,address,phone,'' AS owner_uid,'管理員代建（未綁定帳號）' AS owner_name,'' AS owner_role,0 AS product_count,0 AS active_product_count,0 AS online_product_count,1 AS listing_only,(status='active' AND ${complete}) AS public_visible${pins} FROM (${catalog})${join} WHERE ${filter} AND id>? ORDER BY id LIMIT 21`).bind(...args,after)
     ]);
     if(results.length!==3||results.some(r=>r.success===false||!Array.isArray(r.results)))throw Error('Partner directory unavailable');
     return {summary:results[0].results[0],total:results[1].results[0].total,shops:results[2].results};

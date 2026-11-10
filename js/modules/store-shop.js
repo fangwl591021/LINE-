@@ -11,7 +11,7 @@
   let exploreModule,exploreLoading;
   function loadExploreView(){
     if(exploreModule)return Promise.resolve(exploreModule);
-    if(!exploreLoading)exploreLoading=import('./store-explore-view.js?v=1').then(module=>exploreModule=module).catch(error=>{exploreLoading=null;throw error;});
+    if(!exploreLoading)exploreLoading=import('./store-explore-view.js?v=2').then(module=>exploreModule=module).catch(error=>{exploreLoading=null;throw error;});
     return exploreLoading;
   }
   function categoryTags(scope, selected='') {
@@ -231,7 +231,7 @@
       content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入管理員店家列表…</p>';
       const sameSession=()=>canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&sameSession();
-      const module=await import('./store-admin.js?v=5');
+      const module=await import('./store-admin.js?v=6');
       if(!current())return;
       await module.mountStoreAdmin(content,{api,isCurrent:current,onReviewDrafts:()=>run(()=>adminDrafts()),onManageCatalog:id=>run(()=>adminCatalog(id)),onUploadProducts:id=>run(()=>adminProducts(id)),onManagePartners:()=>window.goPage('admin-partners'),onBack:()=>run(()=>manage()),onView:async id=>{
         if(!current())return;
@@ -322,7 +322,7 @@
       if(!listedModule)return;
       const favorites=readFavorites();
       let shops=exploreFilter==='favorites'?listedShops.filter(shop=>favorites.includes(shop.id)):listedShops.slice();
-      if(exploreSort==='name')shops.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+      if(exploreSort==='name')shops.sort((a,b)=>Number(b.pinned===true)-Number(a.pinned===true)||String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
       content.innerHTML=listedModule.renderExploreView({shops,photo,q:listQuery,category:listCategory,next:listedNext,walletLabel:walletLabel??content.querySelector('[data-explore-balance]')?.textContent??(standalone?'登入查看':'讀取中…'),filter:exploreFilter,sort:exploreSort,favoriteIds:favorites});
       content.querySelector('.shop-explore-search')?.insertAdjacentHTML('beforeend','<button type="button" class="shop-explore-product-search" data-do="discover" aria-label="找商品">商品</button>');
       content.querySelector('.shop-explore-footnote')?.insertAdjacentHTML('beforebegin',`<nav class="shop-explore-entry-nav" aria-label="其他商城入口"><button type="button" data-do="reward-units">贈點單位 ›</button>${canManage()?'<button type="button" data-do="manage">上架公司／商品 ›</button>':''}</nav>`);

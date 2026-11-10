@@ -5,6 +5,7 @@ import {CardLinks} from './card-links.mjs';
 import {generateStoreDraft,polishStoreIntro,StoreDraftError} from './store-ai-draft.mjs';
 import {publicPartnerShops,newestPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
+import {storePinningEnabled} from './store-pinning-state.mjs';
 import {readPublicProducts,ProductDiscoveryError} from './store-product-discovery.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {RETAIL_ROLES,storePlanForRole,retailRoleSql,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
@@ -124,16 +125,20 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     const db=env.ACTMASTER_DB;
     if(request.method==='GET'&&url.pathname==='/v1/store-shop/products')return reply(await readPublicProducts(db,url.searchParams,eligible));
     if(request.method==='GET'&&url.pathname==='/v1/store-shop') {
+      const pinning=storePinningEnabled(env);
+      const pinJoin=pinning?" LEFT JOIN store_catalog_pins cp ON cp.source='shop' AND cp.entity_id=s.id":'';
+      const pinColumn=pinning?',COALESCE(cp.pinned,0) AS pinned':'';
+      const visiblePin=shop=>pinning?{...shop,pinned:shop.pinned===1}:shop;
       const id=url.searchParams.get('shop');
       if(id) {
         if(id.length>80) fail('店面編號不正確');
-        const shop=await db.prepare(`SELECT ${publicColumns} FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND ${eligible}`).bind(id).first();
+        const shop=await db.prepare(`SELECT ${publicColumns}${pinColumn} FROM store_shop_stores s${pinJoin} WHERE s.id=? AND s.status='active' AND ${eligible}`).bind(id).first();
         if(!shop) {
-          const partner=(await publicPartnerShops(db,{id}))[0];
-          if(partner)return reply({success:true,shop:partner,products:[],product_next:''});
+          const partner=(await publicPartnerShops(db,{id,pinning}))[0];
+          if(partner)return reply({success:true,shop:visiblePin(partner),products:[],product_next:''});
           fail('店面尚未開放或已下架',404);
         }
-        return reply({success:true,shop,...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
+        return reply({success:true,shop:visiblePin(shop),...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
       }
       if(url.searchParams.get('discovery')==='newest'){
         const rows=(await db.prepare(`SELECT ${publicColumns},COALESCE(julianday(o.published_at),0) AS discovery_published_at
@@ -144,11 +149,11 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       }
       const query=(url.searchParams.get('q')||'').trim().slice(0,80);
       const cursor=url.searchParams.get('after')||'';
-      const order=catalogOrder(url.searchParams.get('seed')||'',cursor);
+      const order=catalogOrder(url.searchParams.get('seed')||'',cursor,pinning);
       const category=choice(url.searchParams.get('category')||'',categories,'店家業種');
-      const rows=(await db.prepare(`SELECT ${publicColumns}${order.select('s.id')} FROM store_shop_stores s WHERE s.status='active' AND ${eligible} AND ${order.where('s.id')} AND (instr(s.name,?)>0 OR instr(s.category,?)>0 OR instr(s.address,?)>0) AND (?='' OR s.category=?) ORDER BY ${order.by('s.id')} LIMIT 41`).bind(...order.args,query,query,query,category,category).all()).results;
-      const combined=[...rows,...await publicPartnerShops(db,{q:query,category,order})].sort(order.compare);
-      return reply({success:true,shops:combined.slice(0,40).map(({catalog_rank,...shop})=>shop),next:combined.length>40?order.cursor(combined[39]):''});
+      const rows=(await db.prepare(`SELECT ${publicColumns}${order.select('s.id')} FROM store_shop_stores s${pinJoin} WHERE s.status='active' AND ${eligible} AND ${order.where('s.id')} AND (instr(s.name,?)>0 OR instr(s.category,?)>0 OR instr(s.address,?)>0) AND (?='' OR s.category=?) ORDER BY ${order.by('s.id')} LIMIT 41`).bind(...order.args,query,query,query,category,category).all()).results;
+      const combined=[...rows,...await publicPartnerShops(db,{q:query,category,order,pinning})].sort(order.compare);
+      return reply({success:true,shops:combined.slice(0,40).map(({catalog_rank,...shop})=>visiblePin(shop)),next:combined.length>40?order.cursor(combined[39]):''});
     }
     const manage=request.method==='GET'&&url.pathname==='/v1/store-shop/manage';
     const sales=request.method==='GET'&&url.pathname==='/v1/store-shop/sales';
