@@ -62,7 +62,7 @@ test('reviewed industry correction targets only 42 blank, unchanged source rows 
 test('directory UI carries one random visit seed through recommendation/search and uses industry labels',()=>{
  const source=read('js/modules/store-shop.js');
  assert.match(source,/const discoverySeed=Array.from\(crypto.getRandomValues/);
- assert.match(source,/void api\('\?seed='\+discoverySeed\)/);
+ assert.match(source,/void api\('\?discovery=newest'\)/);
  assert.match(source,/\?seed=\$\{discoverySeed\}&after=/);
  const code=source.slice(source.indexOf('  const categories'),source.indexOf('  function photo'));
  const html=vm.runInNewContext(code+';categoryTags("shops","食")');
@@ -158,4 +158,25 @@ test('display-only view renders escaped contact/description, no product or check
  assert.match(content.innerHTML,/&lt;bad&gt;/);assert.match(content.innerHTML,/tel:0911222333/);assert.match(content.innerHTML,/https:\/\/example.com/);
  assert.doesNotMatch(content.innerHTML,/javascript:|user:pass|data-do="online-buy"|member-qr|尚未上架商品/);
  assert.equal(notice.hidden,true);
+});
+
+test('home discovery uses publication time across both sources and ignores ordinary edits',async()=>{
+ const {sql,db}=setup();try{
+  add(sql,1);
+  sql.exec("INSERT INTO users VALUES ('owner','store'); INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES ('77777777-7777-4777-8777-777777777777','owner','舊店','active','2026-01-01')");
+  sql.exec(read('migrations/0084_store_publication_order.sql'));
+  const older=add(sql,2),newer=add(sql,3);
+  sql.prepare("UPDATE store_publication_order SET published_at=? WHERE source='partner' AND entity_id=?").run('2026-11-10 09:00:00',partnerHandle(2));
+  sql.prepare("UPDATE store_publication_order SET published_at=? WHERE source='partner' AND entity_id=?").run('2026-11-10 11:00:00',partnerHandle(3));
+  sql.exec("UPDATE store_shop_stores SET status='draft' WHERE id='77777777-7777-4777-8777-777777777777'; UPDATE store_shop_stores SET status='active',updated_at='2026-11-10T10:00:00.000Z' WHERE id='77777777-7777-4777-8777-777777777777'");
+  const list=async()=>{let r=await call(db,'?discovery=newest');assert.equal(r.status,200);return (await r.json()).shops;};
+  let rows=await list();assert.deepEqual(rows.map(x=>x.id),[newer,'77777777-7777-4777-8777-777777777777',older]);
+  assert.ok(rows.every(x=>!('discovery_published_at'in x)));
+  sql.exec("UPDATE store_shop_stores SET name='更新但不重排',updated_at='2026-11-11T00:00:00.000Z' WHERE id='77777777-7777-4777-8777-777777777777'");
+  assert.deepEqual((await list()).map(x=>x.id),[newer,'77777777-7777-4777-8777-777777777777',older]);
+  sql.prepare("UPDATE point_redemption_partners SET status='hidden' WHERE partner_handle=?").run(partnerHandle(3));
+  rows=await list();assert.deepEqual(rows.map(x=>x.id),['77777777-7777-4777-8777-777777777777',older,id(partnerHandle(1))]);
+  sql.prepare("UPDATE point_redemption_partners SET status='active',updated_at=? WHERE partner_handle=?").run('2026-11-12 00:00:00',partnerHandle(3));
+  assert.equal((await list())[0].id,newer);
+ }finally{sql.close();}
 });

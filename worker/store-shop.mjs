@@ -3,7 +3,7 @@ import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
 import {CardLinks} from './card-links.mjs';
 import {generateStoreDraft,polishStoreIntro,StoreDraftError} from './store-ai-draft.mjs';
-import {publicPartnerShops} from './store-partner-catalog.mjs';
+import {publicPartnerShops,newestPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
 import {readPublicProducts,ProductDiscoveryError} from './store-product-discovery.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
@@ -134,6 +134,13 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
           fail('店面尚未開放或已下架',404);
         }
         return reply({success:true,shop,...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
+      }
+      if(url.searchParams.get('discovery')==='newest'){
+        const rows=(await db.prepare(`SELECT ${publicColumns},COALESCE(julianday(o.published_at),0) AS discovery_published_at
+          FROM store_shop_stores s LEFT JOIN store_publication_order o ON o.source='shop' AND o.entity_id=s.id
+          WHERE s.status='active' AND ${eligible} ORDER BY discovery_published_at DESC,s.id DESC LIMIT 3`).bind().all()).results;
+        const combined=[...rows,...await newestPartnerShops(db)].sort((a,b)=>b.discovery_published_at-a.discovery_published_at||(a.id<b.id?1:a.id>b.id?-1:0));
+        return reply({success:true,shops:combined.slice(0,3).map(({discovery_published_at,...visible})=>visible),next:''});
       }
       const query=(url.searchParams.get('q')||'').trim().slice(0,80);
       const cursor=url.searchParams.get('after')||'';
