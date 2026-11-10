@@ -63,7 +63,9 @@ test('the view click action never forwards a directory category into a store',as
 test('directory filters, management filters, category dropdowns and badges remain',()=>{
  const directory=section('    async function list(', '    function filterProducts(');
  const manage=section('    function renderManage(', '    async function manage(');
- assert.ok(directory.includes("categoryTags('shops',category)"));
+ const explore=readFileSync(new URL('../js/modules/store-explore-view.js',import.meta.url),'utf8');
+ assert.ok(explore.includes('data-do="search-category"'));
+ assert.ok(source.includes("case 'search-category':await list("));
  assert.ok(directory.includes('listCategory=category'));
  assert.ok(manage.includes('addProductTags();'),'Management keeps its existing filter controls');
  assert.ok(source.includes("select('category','商品分類'"));

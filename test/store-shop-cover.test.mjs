@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {renderExploreCards} from '../js/modules/store-explore-view.js';
 
 const css = readFileSync(new URL('../css/store-shop.css', import.meta.url), 'utf8');
 const front = readFileSync(new URL('../js/modules/store-shop.js', import.meta.url), 'utf8');
@@ -36,13 +37,19 @@ test('shop introduction fills the card at 16:9 with a bounded desktop height and
   assert.match(front, /<article class="shop-store-intro">\$\{photo\(s\.image_url,true\)\}/);
 });
 
-test('public shop cards crop consistently inside their existing 4:3 frames', () => {
-  const p = properties('.shop-lifestyle .shop-discovery-grid article>img');
-  assert.equal(p['aspect-ratio'], '4/3');
-  assert.equal(p['object-fit'], 'cover');
-  assert.equal(p['object-position'], 'center');
-  assert.equal(p.height, 'auto');
-  assert.match(front, /result\.shops\.map\(s=>`<article>\$\{photo\(s\.image_url\)\}/);
+test('approved explore shop cards retain the complete image inside their bounded frames', () => {
+  const exploreCss = readFileSync(new URL('../css/store-explore-view.css', import.meta.url), 'utf8');
+  const exploreRules = [...exploreCss.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const exploreProperties = selector => Object.fromEntries(exploreRules
+    .filter(([, candidate]) => candidate.trim() === selector)
+    .flatMap(([, , declaration]) => declaration.split(';').filter(Boolean).map(item => item.split(':').map(value => value.trim()))));
+  const p = exploreProperties('.store-shop[data-shop-view="directory"] .shop-explore-photo img');
+  assert.equal(p.width, '100%');assert.equal(p.height, '100%');assert.equal(p['object-fit'], 'contain');
+  assert.equal(exploreProperties('.store-shop[data-shop-view="directory"] .shop-explore-media')['aspect-ratio'], '16/10');
+  assert.match(front, /listedModule\.renderExploreView\(\{shops,photo/);
+  const html = renderExploreCards([{id:'shop-cover-fixture',name:'合成店家',image_url:'https://images.test/complete-cover.png'}]);
+  assert.match(html, /class="shop-explore-card"/);assert.match(html, /class="shop-explore-photo" data-do="view" data-id="shop-cover-fixture"/);
+  assert.match(html, /<img src="https:\/\/images\.test\/complete-cover\.png"/);
 });
 
 test('cropping remains limited to shop introduction, discovery covers, and decorative hero art', () => {

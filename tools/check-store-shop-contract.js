@@ -25,7 +25,8 @@ assert(front.includes("select('category','商品分類'"));
 assert(front.includes("select('category','店家業種'"));
 assert(front.includes('storeCategorySelect(s.category)'));
 assert(!front.includes("input('category','分類'"));
-assert(front.includes("categoryTags('shops',category)"));
+assert(read('js/modules/store-explore-view.js').includes('data-do="search-category"'));
+assert(front.includes("case 'search-category':await list("));
 assert(front.includes("categoryTags('products')"));
 assert(worker.includes("data.category===undefined"));
 assert(read('migrations/0031_store_product_category.sql').includes("DEFAULT ''"));
@@ -44,5 +45,6 @@ for(const prohibited of ['storeAdjustCustomerPoints','insertUserPoint','UPDATE '
 assert(sales.includes("actor_id=? AND status='succeeded'"));
 assert(sales.includes('s.owner_uid=?'));
 assert(front.includes("import('./store-shop-sales.js?v=2')"));
-assert(front.includes('data-do="sales"'));
+assert(front.includes("case 'sales':"));
+assert(read('js/modules/store-points-home.js').includes("merchantTile('sales'"));
 assert(read('js/modules/store-shop-sales.js').includes('返回商城管理'));

@@ -6,6 +6,14 @@
   const industryLabels={'食':'餐飲食品','宿':'住宿','遊':'旅遊休閒','購':'購物零售','行':'交通接送','服務':'專業服務','製造':'製造手作'};
   const productLabels={'食':'餐飲食品','宿':'住宿方案','遊':'旅遊休閒','購':'購物商品','行':'交通接送','服務':'服務方案','製造':'手作製品',unclassified:'未分類'};
   const categoryIcons={'':'✦','食':'☕','宿':'⌂','遊':'☀','購':'🛍','行':'🚆','服務':'♡','製造':'⚙'};
+  const shellPaths={home:'M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10',store:'M3 9 5 3h14l2 6M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M5 12v9h14v-9M10 21v-6h4v6',scan:'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',history:'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',user:'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 22v-3a8 8 0 0 1 16 0v3',bell:'M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10M9 21h6',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2'};
+  const shellIcon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${shellPaths[name]||shellPaths.store}"/></svg>`;
+  let exploreModule,exploreLoading;
+  function loadExploreView(){
+    if(exploreModule)return Promise.resolve(exploreModule);
+    if(!exploreLoading)exploreLoading=import('./store-explore-view.js?v=1').then(module=>exploreModule=module).catch(error=>{exploreLoading=null;throw error;});
+    return exploreLoading;
+  }
   function categoryTags(scope, selected='') {
     return `<div class="shop-category-tags" role="group" aria-label="${scope==='shops'?'店家業種':'商品分類'}篩選">${['',...categories].map(c=>`<button type="button" data-do="category" data-scope="${scope}" data-category="${c}" aria-pressed="${c===selected}"><span aria-hidden="true">${categoryIcons[c]}</span>${(scope==='shops'?industryLabels[c]:c)||'全部'}</button>`).join('')}</div>`;
   }
@@ -102,7 +110,14 @@
         if(privateView)void checkOnlineWarnings();
       } finally {button.disabled=false;}
     }
-    let listCategory='', listQuery='';
+    let listCategory='', listQuery='',exploreFilter='all',exploreSort='recommended',listedShops=[],listedNext='',listedModule;
+    const favoriteKey=()=> 'store-shop-favorites-v1:'+String(window.currentUserProfile?.userId||'guest');
+    function readFavorites(){
+      try{const ids=JSON.parse(localStorage.getItem(favoriteKey())||'[]');return Array.isArray(ids)?[...new Set(ids.filter(isShopId))].slice(0,50):[];}catch{return [];}
+    }
+    function writeFavorites(ids){
+      try{localStorage.setItem(favoriteKey(),JSON.stringify(ids));return true;}catch{return false;}
+    }
     let discovery={q:'',category:'',purchase_mode:'',redeem:'',after:''};
     let viewedShop=null, viewedProducts=[];
     let walletModule,walletImport;
@@ -129,13 +144,30 @@
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     const initialProductCurrent=()=>!initialProductSession||(root.isConnected&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'&&initialProductSession.owner===window.currentUserProfile?.userId&&initialProductSession.role===window.userRole&&initialProductSession.token===window.liff?.getAccessToken?.());
     root.classList.add('shop-lifestyle','shop-points-theme');
+    for(const [id,file]of [['store-reference-shell-css','store-reference-shell'],['store-explore-view-css','store-explore-view'],['store-merchant-workbench-css','store-merchant-workbench']]){
+      if(!document.getElementById(id)){const link=document.createElement('link');link.id=id;link.rel='stylesheet';link.href='css/'+file+'.css?v=1';document.head.appendChild(link);}
+    }
     root.querySelector('h1').textContent='生活好店';
     root.insertAdjacentHTML('afterbegin','<nav class="shop-home-return" aria-label="返回主首頁"><button type="button" data-do="exit"><span aria-hidden="true">‹</span>回主首頁</button></nav><header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark"><img src="assets/points-logo-transparent-20260916.png" width="1254" height="1254" alt="" decoding="async"></span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
+    if(canMerchantHome())root.querySelector('.shop-brand').insertAdjacentHTML('beforeend',`<div class="shop-shell-tools"><button type="button" data-do="merchant-inbox" aria-label="開啟收件匣">${shellIcon('bell')}</button><button type="button" data-do="${canManage()?'manage':'registration'}" aria-label="${canManage()?'店家設定':'個人設定'}">${shellIcon('settings')}</button></div>`);
     root.querySelector('.shop-notice').classList.add('shop-safety-note');
     root.insertAdjacentHTML('beforeend',`<nav class="shop-bottom-nav" aria-label="商城主要導覽"><button data-do="points-home"><span aria-hidden="true">⌂</span>首頁</button><button data-do="find"><span aria-hidden="true">⌕</span>可用店家</button><button data-do="wallet" class="shop-bottom-qr"><span aria-hidden="true">▦</span>點數 QR</button><button data-do="spending-history"><span aria-hidden="true">▤</span>點數紀錄</button><button data-do="mine"><span aria-hidden="true">♙</span>我的</button></nav>`);
+    function setReferenceNavigation(mode='default'){
+      const merchant=mode==='merchant',reference=mode!=='default';
+      const entries=[
+        [reference?'exit':'points-home','home','首頁'],
+        [merchant?'merchant-home':'find','store',merchant?'店家專區':reference?'探索好店':'可用店家'],
+        [canMerchantHome()?'point-operation':'wallet','scan',canMerchantHome()?'掃碼':'點數 QR'],
+        [merchant&&canTransact()?'sales':'spending-history','history',merchant&&canTransact()?'交易紀錄':'我的點數'],
+        ['mine','user','我的']
+      ];
+      root.querySelector('.shop-bottom-nav').innerHTML=entries.map(([action,icon,label],index)=>`<button type="button" data-do="${action}"${index===2?' class="shop-bottom-qr"':''} aria-current="${index===1&&reference?'page':'false'}"><span aria-hidden="true">${shellIcon(icon)}</span>${label}</button>`).join('');
+    }
     function pageKind(kind) {
       clearHomeWallet?.();clearHomeWallet=null;
       root.dataset.shopView=kind;
+      root.classList.toggle('shop-reference-mode',kind==='directory'||kind==='home'&&!!merchantView);
+      setReferenceNavigation();
       const notice=root.querySelector?.('.shop-notice');if(notice)notice.hidden=false;
       const selected=kind==='directory'?'list':kind==='discovery'?'discover':kind==='manage'?'manage':kind.startsWith('admin-')?'admin-stores':'';
       root.querySelectorAll('.shop-bar button[data-do]').forEach(button=>{
@@ -148,25 +180,26 @@
       pageKind('home');const version=++epoch;alert.textContent='';
       const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
       const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
-      const home=await import('./store-points-home.js?v=8');if(!current())return;
+      const home=await import('./store-points-home.js?v=9');if(!current())return;
       const allowed=canMerchantHome()&&!!home.merchantRole(role);
       merchantView=allowed&&(toggle?!merchantView:merchantView??true);
+      if(!merchantView){await list();return;}
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
-      const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
+      root.classList.add('shop-reference-mode');setReferenceNavigation('merchant');
+      const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.dataset.do='points-view';switcher.textContent=merchantView?'探索好店':'商家版';
       const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
-      content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),redeemOnly:redeemOnly(),standalone,canManage:canManage(),role:window.userRole});
-      content.querySelector('.points-section-title')?.insertAdjacentHTML('beforebegin','<button type="button" data-do="discover" class="shop-discover-entry"><strong>探索商品 ›</strong><span>跨店搜尋商品，查看價格與店家折抵規則</span></button>');
-      if(!standalone)content.querySelector('.points-actions')?.insertAdjacentHTML('afterend','<button type="button" data-do="consumption-journal" class="shop-journal-entry">▤ 我的消費日誌 <span>店內消費・網購明細 ›</span></button>');
-      const nav=root.querySelector('.shop-bottom-nav');
-      const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;
-      const icons={'points-home':'home',find:'pin','spending-history':'history',mine:'user'};
-      nav.querySelectorAll('button').forEach(button=>{if(icons[button.dataset.do])button.querySelector('span').innerHTML=home.pointIcon(icons[button.dataset.do]);});
-      // Points start immediately; the public directory is independent and cannot block QR.
-      if(!standalone)void loadWalletModule().then(module=>{if(current())clearHomeWallet=module.mountStoreWalletCard(content,{isCurrent:current,onInvalid:()=>{
-        if(version===epoch&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'){merchantView=undefined;void run(()=>pointsHome());}
-      }});}).catch(()=>{if(current())content.querySelector('[data-home-balance]').textContent='點按 QR 重試';});
-      void api('?discovery=newest').then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
-      void home.readRewardUnits(base).then(result=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML=home.renderRewardCards(result.units,{home:true});}).catch(()=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML='<p>贈點單位暫時無法載入。<button type="button" data-do="reward-units">重新載入</button></p>';});
+      content.innerHTML=home.renderPointsHome({merchant:true,rewardOnly:rewardOnly(),redeemOnly:redeemOnly(),standalone,canManage:canManage(),role:window.userRole,canMembers:typeof window.initCustomersPage==='function',canTutorial:typeof window.openTutorialCenter==='function',merchantLoading:canManage()});
+      if(!canManage())return;
+      let profile=null,stats={},profileLoaded=false;
+      const paint=()=>{if(current()){const host=content.querySelector('[data-merchant-profile]');if(host)host.innerHTML=home.renderMerchantProfile({shop:profile,stats,loading:!profileLoaded});}};
+      void api('/manage',null,true).then(result=>{
+        if(!current())return;profile=result.shop;profileLoaded=true;stats.productCount=Number.isSafeInteger(result.product_count)?result.product_count:undefined;paint();
+        const label=content.querySelector('[data-merchant-plan-label]');if(label&&result.cooperation_plan?.label)label.textContent=result.cooperation_plan.label;
+      }).catch(()=>{if(current()){profileLoaded=true;paint();}});
+      const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+      void api('/sales?'+new URLSearchParams({start:today.slice(0,8)+'01',end:today,page:'0'}),null,true).then(result=>{
+        if(!current())return;stats.monthlyRedemptionCount=result.summary?.count;stats.monthlyRedemptionPoints=result.summary?.points;paint();
+      }).catch(()=>{});
     }
     async function rewardUnits(id='') {
       pageKind('reward-units');const version=++epoch;alert.textContent='';
@@ -285,25 +318,48 @@
       if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button>${viewedShop?.merchant_enabled===0?'':`<button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button>`}</div></div></article>`;
       return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}${canTransact()?`<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div>`:''}</div></article>`;
     }
-    async function list(after='',q='',category='') {
+    function paintExplore(walletLabel){
+      if(!listedModule)return;
+      const favorites=readFavorites();
+      let shops=exploreFilter==='favorites'?listedShops.filter(shop=>favorites.includes(shop.id)):listedShops.slice();
+      if(exploreSort==='name')shops.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+      content.innerHTML=listedModule.renderExploreView({shops,photo,q:listQuery,category:listCategory,next:listedNext,walletLabel:walletLabel??content.querySelector('[data-explore-balance]')?.textContent??(standalone?'登入查看':'讀取中…'),filter:exploreFilter,sort:exploreSort,favoriteIds:favorites});
+      content.querySelector('.shop-explore-search')?.insertAdjacentHTML('beforeend','<button type="button" class="shop-explore-product-search" data-do="discover" aria-label="找商品">商品</button>');
+      content.querySelector('.shop-explore-footnote')?.insertAdjacentHTML('beforebegin',`<nav class="shop-explore-entry-nav" aria-label="其他商城入口"><button type="button" data-do="reward-units">贈點單位 ›</button>${canManage()?'<button type="button" data-do="manage">上架公司／商品 ›</button>':''}</nav>`);
+    }
+    async function list(after='',q='',category='',filter=exploreFilter) {
       pageKind('directory');
+      root.dataset.pointsRole='consumer';setReferenceNavigation('explore');
+      const switcher=root.querySelector('.points-view-switch');switcher.hidden=!canMerchantHome();switcher.dataset.do='merchant-home';switcher.textContent='店家專區';
+      const brand=root.querySelector('.shop-brand-entry');brand.dataset.do='wallet';brand.setAttribute('aria-label','點數通：我的點數 QR');
       root.querySelector('.shop-notice').hidden=true;
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
-      const result=await api(`?seed=${discoverySeed}&after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
-      if(version!==epoch) return;
+      const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
+      const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
+      let walletLabel=standalone?'登入查看':'讀取中…';
+      if(!standalone)void loadWalletModule().then(wallet=>wallet.readStoreWalletSummary()).then(summary=>{
+        walletLabel=summary?Number(summary.balance).toLocaleString('zh-TW')+' 點':'暫時無法讀取';
+        if(current()){const balance=content.querySelector('[data-explore-balance]');if(balance)balance.textContent=walletLabel;}
+      }).catch(()=>{walletLabel='暫時無法讀取';if(current()){const balance=content.querySelector('[data-explore-balance]');if(balance)balance.textContent=walletLabel;}});
+      exploreFilter=['all','newest','favorites'].includes(filter)?filter:'all';
+      const module=await loadExploreView();if(!current())return;
+      listCategory=category;listQuery=q;listedModule=module;listedShops=[];listedNext='';paintExplore(walletLabel);
+      const loading=content.querySelector('.shop-explore-empty');if(loading)loading.textContent='載入店家中…';
+      let result;
+      try{
+      if(exploreFilter==='favorites'){
+        const ids=readFavorites(),shops=[];let cursor=0,unavailable=0;
+        await Promise.all(Array.from({length:Math.min(4,ids.length)},async()=>{
+          while(cursor<ids.length){const id=ids[cursor++];try{const row=await api('?shop='+encodeURIComponent(id));if(row.shop?.id===id)shops.push(row.shop);}catch(error){if(error.status!==404)unavailable++;}if(!current())return;}
+        }));
+        result={shops,next:''};if(unavailable&&current())alert.textContent='部分收藏店家暫時無法讀取，收藏記錄仍保留。';
+      }else result=await api(exploreFilter==='newest'?'?discovery=newest':`?seed=${discoverySeed}&after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
+      }catch(error){if(current()){const status=content.querySelector('.shop-explore-empty');if(status)status.textContent='店家暫時無法載入，請重新搜尋或再試一次。';}throw error;}
+      if(!current()) return;
       listCategory=category; listQuery=q;
-      content.innerHTML=`<form data-form="search" class="shop-row"><input name="q" aria-label="搜尋店名、類別或地址" placeholder="搜尋店名、類別或地址" value="${esc(q)}" maxlength="80"><button class="primary">搜尋</button></form><p class="shop-meta">${result.shops.length} 家店家</p><div class="shop-grid">${result.shops.map(s=>`<article>${photo(s.image_url)}<h2>${esc(s.name)}</h2><p class="shop-meta">${esc(s.category)} · ${esc(s.address)}</p><p>${esc(s.description)}</p><button class="primary" data-do="view" data-id="${esc(s.id)}">${s.has_active_products===1?'進入商城':'前往店家'}</button></article>`).join('')}</div>${result.shops.length?'':'<p>目前沒有符合條件的已上架店家。</p>'}${result.next?`<button data-do="next" data-id="${esc(result.next)}" data-query="${esc(q)}">下一頁</button>`:''}`;
-      content.insertAdjacentHTML('afterbegin',categoryTags('shops',category));
-      content.insertAdjacentHTML('afterbegin',discoveryTabs(false));
-      if(canManage())content.querySelector('.shop-discovery-tabs').insertAdjacentHTML('afterend','<section class="shop-listing-entry"><h2>上架公司與商品</h2><p>折抵店家可上架 1 件商品；雙向完整版可上架 20 件商品，皆可設定網購及購物金折抵。公開前仍需通過平台審核。</p><button type="button" data-do="manage" class="primary">上架公司／商品</button></section>');
-      content.querySelector('.shop-grid')?.classList.add('shop-discovery-grid');
-      content.querySelectorAll('.shop-discovery-grid article').forEach(card=>{
-        if(!card.querySelector('img'))card.insertAdjacentHTML('afterbegin','<div class="shop-no-photo" aria-hidden="true">⌂<small>探索在地好店</small></div>');
-        card.querySelector('button').classList.add('shop-store-link');
-        const paragraphs=card.querySelectorAll('p');paragraphs[1]?.classList.add('shop-card-description');
-      });
-      content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
-      content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理本人店面與商品</small></strong></button>':''}</div>`);
+      listedShops=Array.isArray(result.shops)?result.shops:[];
+      if(exploreFilter!=='all')listedShops=listedShops.filter(shop=>(!category||shop.category===category)&&(!q||[shop.name,shop.category,shop.address].some(value=>String(value||'').toLowerCase().includes(q.toLowerCase()))));
+      listedNext=result.next||'';listedModule=module;paintExplore(walletLabel);
     }
     function discoveryTabs(products){
       const settings=canManage();
@@ -594,6 +650,10 @@
       void run(async()=>{
         switch(button.dataset.do) {
           case 'points-home':await pointsHome();break;
+          case 'merchant-home':if(!canMerchantHome())throw new Error('請以具店家資格的帳號登入');merchantView=true;await pointsHome();break;
+          case 'merchant-members':if(!canMerchantHome()||typeof window.initCustomersPage!=='function')throw new Error('聯絡人功能尚未就緒');++epoch;window.goPage('customers');break;
+          case 'merchant-tutorial':if(typeof window.openTutorialCenter!=='function')throw new Error('操作教學尚未載入');window.openTutorialCenter('merchant');break;
+          case 'merchant-inbox':if(standalone)location.assign(loginLink());else{++epoch;window.goPage('inbox');}break;
           case 'reward-units':await rewardUnits();break;
           case 'reward-unit':await rewardUnits(button.dataset.id);break;
           case 'points-view':await pointsHome(true);break;
@@ -601,14 +661,23 @@
           case 'point-redeem':await openPointOperations('redeem');break;
           case 'point-operation': await openPointOperations();break;
           case 'exit': ++epoch; standalone?location.assign(new URL('index.html',location.href).href):window.goPage('home'); break;
-          case 'list': await list(); break;
-          case 'discover':await discover({},'');break;
+          case 'list': exploreFilter='all';await list(); break;
+          case 'search-category':await list('',content.querySelector('[name="q"]')?.value??listQuery,button.dataset.category);break;
+          case 'explore-filter':await list('',listQuery,listCategory,button.dataset.filter);break;
+          case 'explore-favorite':{
+            const id=button.dataset.id;if(!isShopId(id))throw new Error('店家識別碼不正確');
+            const ids=readFavorites(),saved=ids.includes(id);
+            if(!saved&&ids.length>=50)throw new Error('本機最多收藏 50 家，請先取消部分收藏。');
+            if(!writeFavorites(saved?ids.filter(value=>value!==id):[...ids,id]))throw new Error('此瀏覽器暫時無法儲存本機收藏。');
+            paintExplore();break;
+          }
+          case 'discover':await discover({q:content.querySelector('[data-form="search"] [name="q"]')?.value||''},'');break;
           case 'discover-back':await discover(discovery,discovery.after);break;
           case 'discover-detail':await discoverDetail(button.dataset.id);break;
           case 'discover-next':await discover(discovery,button.dataset.cursor);break;
           case 'discover-category':await discover({...discoveryValues(),category:button.dataset.category});break;
-          case 'find': await list();content.querySelector('.shop-discovery-tabs')?.scrollIntoView({block:'start'});break;
-          case 'region': await list();content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
+          case 'find': exploreFilter='all';await list();content.querySelector('.shop-explore-hero')?.scrollIntoView({block:'start'});break;
+          case 'region': await list('',listQuery,listCategory,'all');alert.textContent='輸入地區或地址尋找好店。';content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
           case 'organization': window.ContractOrganization.member();break;
@@ -659,7 +728,7 @@
             break;
           }
           case 'more-products': await moreProducts(button);break;
-          case 'next': await list(button.dataset.id,button.dataset.query,listCategory); break;
+          case 'next': await list(button.dataset.id,button.dataset.query,button.dataset.category??listCategory); break;
           case 'category':
             if(button.dataset.scope==='shops') await list('',content.querySelector('[name="q"]')?.value??listQuery,button.dataset.category);
             else filterProducts(button.dataset.category);
@@ -755,6 +824,7 @@
     let productUpload = null;
     root.onchange=event=>{
       const picker=event.target;
+      if(picker.matches('[data-explore-sort]')){exploreSort=picker.value==='name'?'name':'recommended';paintExplore();return;}
       if(picker.closest('[data-form="product-search"]')&&['purchase_mode','redeem'].includes(picker.name)){void run(()=>discover(discoveryValues()));return;}
       if(picker.closest('[data-form="product"]')&&['purchase_mode','status'].includes(picker.name)){void checkOnlineWarnings();return;}
       if(picker.name==='image_url'&&picker.closest('[data-form="store"],[data-form="product"]')){picker.closest('.shop-image-field').querySelector('.shop-upload-preview').innerHTML=photo(picker.value);pendingImage(picker.closest('form'),'圖片網址已修改，尚未儲存。請核對預覽並儲存以更新公開圖片。');return;}
