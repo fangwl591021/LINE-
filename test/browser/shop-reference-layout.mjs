@@ -118,6 +118,19 @@ async function assertLayout(page,{directory=false}={}){
   await page.evaluate(()=>scrollTo(0,0));return result;
 }
 const rootAction=(page,action)=>page.locator('.shop-content [data-do="'+action+'"]').first();
+async function assertRoleHeader(page,mode){
+  const state=await page.evaluate(()=>{
+    const root=document.querySelector('#page-store-shop'),tools=root.querySelector('.shop-shell-tools');
+    const controls=[...root.querySelectorAll('.shop-home-return button,.shop-brand-entry,.points-view-switch,.shop-shell-tools button')].filter(n=>{const r=n.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(n).visibility!=='hidden';}).map(n=>{const r=n.getBoundingClientRect();return {name:n.getAttribute('aria-label')||n.dataset.do,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});
+    const overlaps=[];for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++){
+      const a=controls[i],b=controls[j];if(Math.min(a.right,b.right)>Math.max(a.left,b.left)+.5&&Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+.5)overlaps.push({first:a,second:b});
+    }
+    return {toolsPresent:!!tools,toolsDisplay:tools?getComputedStyle(tools).display:null,overlaps};
+  });
+  assert.equal(state.toolsPresent,true,'merchant identity keeps a shell-tools element for both views');
+  assert.equal(state.toolsDisplay,mode==='merchant'?'flex':'none','merchant tools are visible only in the merchant view');
+  assert.deepEqual(state.overlaps,[],'header actions, brand and return have separate click areas');
+}
 
 async function run(){
   const browser=await playwright.chromium.launch({headless:true,channel:'chrome'}),results=[],layoutIssues=[];
@@ -136,7 +149,15 @@ async function run(){
         assert.match(await m.page.locator('[data-merchant-plan-label]').innerText(),/雙向完整版/);assert.equal(await m.page.locator('[data-merchant-expiry]').innerText(),'依合作方案');
         assert.equal(await m.page.locator('[data-merchant-stat="productCount"]').innerText(),'6');assert.match(await m.page.locator('[data-merchant-stat="monthlyRedemptionCount"]').innerText(),/^3/);
         await m.page.screenshot({path:join(OUT,`merchant-${width}.png`),fullPage:true});try{await assertLayout(m.page);}catch(error){layoutIssues.push({view:'merchant',width,message:error.message,actual:error.actual});}
-        await assertClean(m);results.push({view:'merchant',width,overflow:false,realFixtureStats:true});
+        try{await assertRoleHeader(m.page,'merchant');}catch(error){layoutIssues.push({view:'merchant-header',width,message:error.message,actual:error.actual});}
+        for(const cycle of [1,2]){
+          await m.page.locator('.points-view-switch[data-do="points-view"]').click();await m.page.locator('.shop-explore-card').first().waitFor();await m.page.locator('[data-explore-balance]').filter({hasText:'9,970'}).waitFor();
+          await m.page.screenshot({path:join(OUT,`merchant-explore-${width}.png`),fullPage:true});
+          try{await assertRoleHeader(m.page,'consumer');await assertLayout(m.page,{directory:true});}catch(error){layoutIssues.push({view:'merchant-consumer-header',width,cycle,message:error.message,actual:error.actual});}
+          await m.page.locator('.points-view-switch[data-do="merchant-home"]').click();await m.page.locator('.merchant-workbench').waitFor();
+          try{await assertRoleHeader(m.page,'merchant');}catch(error){layoutIssues.push({view:'merchant-header-restored',width,cycle,message:error.message,actual:error.actual});}
+        }
+        await assertClean(m);results.push({view:'merchant',width,overflow:false,realFixtureStats:true,consumerToolsHidden:true,headerActionsSeparated:true,switchCycles:2});
       }finally{await m.close();}
     }
     // Existing roles continue to determine available actions; the reference image grants no powers.
