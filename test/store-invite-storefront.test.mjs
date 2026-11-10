@@ -106,7 +106,7 @@ test('cashier and member-product QR keep their original LIFF intent while forwar
 });
 test('management exposes explicit share action only after shop is active, without creating a shop',async()=>{
  for(const status of ['active','draft']){
-  const s=setup({standalone:false,section:'manage',products:false,status});s.window.userRole='redeem';s.window.liff.getAccessToken=()=> 'test-only';s.mount();await flush();
+  const s=setup({standalone:false,section:'manage',products:false,status});s.window.userRole='redeem';s.window.currentUserProfile={userId:ref};s.window.currentUser={userId:ref,role:'redeem',retailSellerEligible:true};s.window.liff.getAccessToken=()=> 'test-only';s.mount();await flush();
   const button=s.content.appended.find(html=>typeof html==='string'&&html.includes('data-do="share-store"'));assert.ok(button);assert.equal(button.includes('disabled'),status==='draft');
   await s.click('share-store');assert.deepEqual(s.shares,status==='active'?['store']:[]);assert.equal(s.calls.length,1);assert.equal(s.calls[0].options.method,'GET');assert.match(s.calls[0].url,/\/manage$/);
  }

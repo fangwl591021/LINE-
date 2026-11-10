@@ -39,8 +39,10 @@ const stubs={
 function plan(role){return role==='admin'?{id:'admin',label:'平台管理員',productLimit:null,canManage:true,canOnline:true}:role==='reward'?{id:'reward',label:'贈點單位',productLimit:0,canManage:false,canOnline:false}:role==='redeem'?{id:'redeem',label:'折抵店家',productLimit:1,canManage:true,canOnline:true}:role==='store'?{id:'full',label:'雙向完整版',productLimit:20,canManage:true,canOnline:true}:{id:'member',label:'一般會員',productLimit:0,canManage:false,canOnline:false};}
 const shellStyle=/<style id="store-shop-shell-layout">([\s\S]*?)<\/style>/.exec(readFileSync(join(ROOT,'index.html'),'utf8'))?.[0]||'';
 
-export async function createFixture(browser,{role='user',width=390,section='',balance=9970,wallet='success',directory='success',walletHold=false,directoryHold=false,profileHold=false,stats='success'}={}){
+export async function createFixture(browser,{role='user',width=390,section='',balance=9970,wallet='success',directory='success',walletHold=false,directoryHold=false,profileHold=false,stats='success',retailSellerEligible='auto',sessionOwner=OWNER}={}){
   const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'}),page=await context.newPage();
+  const eligible=retailSellerEligible==='auto'?['store','redeem','admin'].includes(role):retailSellerEligible;
+  const sessionUser={userId:sessionOwner,role,name:'合成測試使用者',...(eligible==='missing'?{}:{retailSellerEligible:eligible})};
   const state={role,balance,wallet,directory,walletHold,directoryHold,profileHold,stats,requests:[],apiCalls:[],blocked:[],errors:[],writes:[],releaseWallet:null,releaseDirectory:null,releaseProfile:null};
   page.on('pageerror',error=>state.errors.push(error.message));
   page.on('dialog',dialog=>{state.errors.push('Unexpected native dialog: '+dialog.message());return dialog.dismiss();});
@@ -56,7 +58,7 @@ export async function createFixture(browser,{role='user',width=390,section='',ba
     if(url.origin!==ORIGIN){state.blocked.push(request.url());return route.abort();}
     if(url.pathname==='/'){
       return route.fulfill({contentType:'text/html; charset=utf-8',body:`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>商城參考版型・隔離驗證</title>${shellStyle}<style>body{margin:0;font:16px Arial;background:#f5faf8}.hidden{display:none!important}#top-nav{position:fixed;top:0;left:0;height:96px;width:100%;background:#fee}#main{padding:112px 16px 128px}#bottom-nav,#bottom-nav-admin{position:fixed;bottom:0;left:0;right:0;height:64px;background:#fee}</style><link id="store-shop-css" rel="stylesheet" href="/css/store-shop.css"><body><header id="top-nav">原系統標頭</header><main id="main"><section id="page-home" class="hidden">原系統首頁</section><section id="page-customers" class="hidden">本人的客戶聯絡人</section><section id="page-store-shop"></section></main><nav id="bottom-nav">原系統底部</nav><nav id="bottom-nav-admin" class="hidden">原管理員底部</nav><script>
-      window.currentPage='store-shop';window.previousPage='home';window.currentViewMode='user';window.__fixtureCalls=[];window.userRole=${JSON.stringify(role)};window.currentUserProfile={userId:'${OWNER}',displayName:'合成測試使用者'};window.currentUser={userId:'${OWNER}',role:${JSON.stringify(role)},name:'合成測試使用者'};window.Config={WORKER_URL:location.origin};window.WORKER_URL=location.origin;window.fixtureToken='synthetic-'+${JSON.stringify(role)};window.liff={isLoggedIn:()=>!!fixtureToken,getAccessToken:()=>fixtureToken,getProfile:async()=>({userId:currentUserProfile.userId})};window.fetchAPI=(action,data)=>window.__fixtureApi(action,data);window.resolvePointUserIdForCurrentProfile=owner=>owner;window.requestIdleCallback=()=>0;window.openTutorialCenter=id=>__fixtureCalls.push({action:'tutorial',id});window.initCustomersPage=()=>__fixtureCalls.push({action:'customers'});window.loadUserActivities=()=>__fixtureCalls.push({action:'home'});window.showToast=()=>{};window.canUseStorePointCashier=()=>['store','reward','redeem','admin'].includes(userRole);window.isRewardOnlyPointCashier=()=>userRole==='reward';window.isRedeemOnlyPointCashier=()=>userRole==='redeem';</script><script src="/js/navigation.js"></script><script>goPage('store-shop',true);</script><script src="/js/modules/store-shop.js"></script><script>StoreShop.mount(document.getElementById('page-store-shop'),false,'','','',${JSON.stringify(section)});</script></body></html>`});
+      window.currentPage='store-shop';window.previousPage='home';window.currentViewMode='user';window.__fixtureCalls=[];window.userRole=${JSON.stringify(role)};window.currentUserProfile={userId:'${OWNER}',displayName:'合成測試使用者'};window.currentUser=${JSON.stringify(sessionUser)};window.Config={WORKER_URL:location.origin};window.WORKER_URL=location.origin;window.fixtureToken='synthetic-'+${JSON.stringify(role)};window.liff={isLoggedIn:()=>!!fixtureToken,getAccessToken:()=>fixtureToken,getProfile:async()=>({userId:currentUserProfile.userId})};window.fetchAPI=(action,data)=>window.__fixtureApi(action,data);window.resolvePointUserIdForCurrentProfile=owner=>owner;window.requestIdleCallback=()=>0;window.openTutorialCenter=id=>__fixtureCalls.push({action:'tutorial',id});window.initCustomersPage=()=>__fixtureCalls.push({action:'customers'});window.loadUserActivities=()=>__fixtureCalls.push({action:'home'});window.showToast=()=>{};window.canUseStorePointCashier=()=>['store','reward','redeem','admin'].includes(userRole);window.isRewardOnlyPointCashier=()=>userRole==='reward';window.isRedeemOnlyPointCashier=()=>userRole==='redeem';</script><script src="/js/navigation.js"></script><script>goPage('store-shop',true);</script><script src="/js/modules/store-shop.js"></script><script>StoreShop.mount(document.getElementById('page-store-shop'),false,'','','',${JSON.stringify(section)});</script></body></html>`});
     }
     if(Object.hasOwn(stubs,pathname))return route.fulfill({contentType:'text/javascript',body:stubs[pathname]});
     if(files.has(pathname)){
@@ -173,6 +175,28 @@ async function run(){
         assert.deepEqual(await f.page.evaluate(()=>__fixtureCalls.filter(x=>x.action==='point-operation').at(-1)),{action:'point-operation',mode:role==='redeem'?'redeem':'reward'});
         await assertClean(f);results.push({role,permissions:true});
       }finally{await f.close();}
+    }
+    for(const config of [
+      {role:'user'}, {role:'reward'}, {role:'tenant'},
+      {role:'store',retailSellerEligible:false},
+      {role:'store',retailSellerEligible:'missing'},
+      {role:'store',retailSellerEligible:'true'},
+      {role:'store',sessionOwner:OTHER}
+    ]){
+      const denied=await createFixture(browser,{...config,section:'manage'});try{
+        await denied.page.locator('[role="alert"]').filter({hasText:'加入會員不會自動取得上架資格'}).waitFor();
+        assert.equal(await denied.page.locator('[data-form="store"],[data-form="product"]').count(),0);
+        assert.equal(await denied.page.locator('#page-store-shop [data-do="manage"]').count(),0);
+        assert.equal(denied.state.requests.some(r=>r.path==='/v1/store-shop/manage'),false,'ineligible identity is stopped before private seller reads');
+        await assertClean(denied);results.push({sellerDenied:config,privateSellerReads:0});
+      }finally{await denied.close();}
+    }
+    for(const role of ['store','redeem','admin']){
+      const allowed=await createFixture(browser,{role,section:'manage'});try{
+        await allowed.page.locator('[data-form="store"]').waitFor();
+        assert.ok(allowed.state.requests.some(r=>r.path==='/v1/store-shop/manage'));
+        await assertClean(allowed);results.push({sellerAllowed:role});
+      }finally{await allowed.close();}
     }
     for(const [wallet,balance,expected]of [['success',0,'0 點'],['failure',0,'暫時無法讀取']]){
       const f=await createFixture(browser,{wallet,balance});try{
