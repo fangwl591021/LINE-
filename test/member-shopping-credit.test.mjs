@@ -4,6 +4,8 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {writeRegistrationWithCredits,deliverMemberCredits,verifyRegistrationActor} from '../worker/member-shopping-credit.mjs';
+import {RETAIL_ROLES} from '../js/modules/store-cooperation-plans.mjs';
+import {isRewardOnlyRole} from '../worker/reward-only-cashier.mjs';
 
 const uid = n => 'U'+n.repeat(32), buyer=uid('a'), sponsor=uid('b'), other=uid('c');
 const source = readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');
@@ -87,4 +89,92 @@ test('verified profile save uses the actual registration writer and persists the
  assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(buyer).referrer_id,sponsor);
  assert.equal(f.rows().find(r=>r.award_type==='member_inviter_bonus').user_id,sponsor);
  assert.equal(f.rows().length,3);f.sql.close();
+});
+
+// Automatic LINE/profile membership uses the real writer and index SQL. Network,
+// referral-card creation and point-ledger initialization stay isolated here.
+function automaticMemberFixture(t){
+ const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
+ sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,name TEXT DEFAULT '',industry TEXT DEFAULT '',gender TEXT DEFAULT '',phone TEXT DEFAULT '',birthday TEXT DEFAULT '',region TEXT DEFAULT '',address TEXT DEFAULT '',socials TEXT DEFAULT '',role TEXT DEFAULT 'user',store_id TEXT DEFAULT '',referrer_id TEXT DEFAULT '',network_id TEXT DEFAULT 'admin',tg_token TEXT DEFAULT '',tg_chat_id TEXT DEFAULT '',legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',identity_source TEXT DEFAULT '',migrated_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,points INTEGER DEFAULT 0);
+ CREATE TABLE user_identity_links(id INTEGER PRIMARY KEY,old_line_id TEXT,new_line_id TEXT,status TEXT,updated_at TEXT);
+ CREATE TABLE card_contacts(row_id TEXT,line_id TEXT,creator_id TEXT,owner_user_id TEXT,profile_user_id TEXT,claimed_by_uid TEXT,name TEXT,mobile TEXT,office_phone TEXT,title TEXT,company_name TEXT,network_id TEXT,source_type TEXT,created_at TEXT,updated_at TEXT);
+ CREATE TABLE line_oa_threads(thread_id TEXT PRIMARY KEY,user_id TEXT,source_type TEXT DEFAULT 'user',display_name TEXT DEFAULT '',picture_url TEXT DEFAULT '',last_message_text TEXT DEFAULT '',last_message_type TEXT DEFAULT '',last_event_type TEXT DEFAULT '',message_count INTEGER DEFAULT 0,unread_count INTEGER DEFAULT 0,status TEXT DEFAULT 'open',last_event_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+ CREATE TABLE line_oa_messages(message_id TEXT PRIMARY KEY,thread_id TEXT,user_id TEXT,direction TEXT,message_type TEXT,text_content TEXT,event_type TEXT,reply_token TEXT,raw_json TEXT,created_at TEXT);
+ CREATE TABLE point_awards(award_id TEXT PRIMARY KEY,points INTEGER,status TEXT);INSERT INTO point_awards VALUES('existing-award',300,'sent');
+ CREATE TABLE admin_point_ledger(row_id TEXT PRIMARY KEY,points INTEGER);INSERT INTO admin_point_ledger VALUES('existing-ledger',123);`);
+ let failFast=false;
+ const env={ACTMASTER_DB:{prepare(query){const statement=(args=[])=>({
+  bind(...values){return statement(values);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},
+  async run(){if(failFast&&query.includes("'line_oa_chat_index'")){failFast=false;throw Error('synthetic fast-index failure');}return {meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}
+ });return statement();}}};
+ const object=name=>{const found=source.match(new RegExp(`^const ${name} = \\{[\\s\\S]*?^\\};`,'m'));assert.ok(found,name);return found[0];};
+ const context=vm.createContext({console,TextEncoder,crypto,Date,URL,RETAIL_ROLES,isRewardOnlyRole,writeRegistrationWithCredits,
+  AdminPointModule:{async ensure(){}},fetch(){throw Error('external I/O forbidden');}});
+ vm.runInContext([object('SecurityModule'),object('D1ReadModule'),object('D1WriteModule'),object('PointModule'),object('LineOAChatModule'),
+  'globalThis.modules={write:D1WriteModule,point:PointModule,chat:LineOAChatModule};'].join('\n'),context);
+ const {write,point,chat}=context.modules;write.clearUserCache=async()=>{};write.ensureReferralPlaceholderCard=async()=>null;chat.fetchProfile=async()=>({displayName:'合成自動會員',pictureUrl:'https://example.invalid/avatar'});
+ const seed=(id,industry='',role='user',points=0)=>sql.prepare('INSERT INTO users(row_id,line_id,name,industry,role,points) VALUES(?,?,?,?,?,?)').run(id,id,'既有會員',industry,role,points);
+ const thread=(id,name='合成對話')=>sql.prepare('INSERT INTO line_oa_threads(thread_id,user_id,display_name,picture_url,last_event_at) VALUES(?,?,?,?,?)').run('line:'+id,id,name,'https://example.invalid/avatar','2026-11-10T00:00:00Z');
+ const row=id=>sql.prepare('SELECT * FROM users WHERE line_id=?').get(id);
+ const points=()=>JSON.stringify([sql.prepare('SELECT * FROM point_awards').all(),sql.prepare('SELECT * FROM admin_point_ledger').all()]);
+ return {sql,env,write,point,chat,seed,thread,row,points,failNextFast:()=>{failFast=true;}};
+}
+
+for(const slow of [false,true])test((slow?'slow fallback':'fast SQL')+' defaults only missing industry and honors supplied profile industry aliases',async t=>{
+ const profiles=[{}, {industry:'教育業',title:'不應覆寫',companyName:'不應覆寫'}, {title:'設計業',companyName:'不應覆寫'}, {companyName:'餐飲業'}];
+ for(const [index,profile] of profiles.entries()){
+  const f=automaticMemberFixture(t),before=f.points();if(slow)f.failNextFast();
+  const result=await f.point.ensureLocalPointWalletIndexFast(f.env,buyer,{name:'合成會員',...profile});
+  assert.equal(result.success,true);assert.equal(result.source,slow?'local_wallet_index':'line_oa_chat_index');
+  const row=f.row(buyer);assert.equal(row.industry,['服務業','教育業','設計業','餐飲業'][index]);assert.equal(row.role,'user');assert.equal(row.points,0);assert.equal(row.point_line_id,buyer);assert.equal(f.points(),before);
+ }
+});
+
+test('automatic indexes preserve existing industry, raw roles and points in fast and slow paths',async t=>{
+ for(const slow of [false,true])for(const [industry,role] of [['LINE OA','tenant'],['醫療業','store'],['金融業','reward'],['教育業','redeem']]){
+  const f=automaticMemberFixture(t);f.seed(buyer,industry,role,876);const before=f.points();if(slow)f.failNextFast();
+  assert.equal((await f.point.ensureLocalPointWalletIndexFast(f.env,buyer,{industry:'服務業',role:'admin'})).success,true);
+  assert.equal(f.row(buyer).industry,industry);assert.equal(f.row(buyer).role,role);assert.equal(f.row(buyer).points,876);assert.equal(f.points(),before);
+ }
+});
+
+test('webhook saveEvent passes the service industry to the real fast index and duplicate messages do not re-create it',async t=>{
+ const f=automaticMemberFixture(t),calls=[],actual=f.point.ensureLocalPointWalletIndexFast;
+ f.point.ensureLocalPointWalletIndexFast=async function(env,id,profile){calls.push({id,profile});return actual.call(this,env,id,profile);};
+ const event={type:'message',timestamp:1794268800000,source:{type:'user',userId:buyer},message:{id:'synthetic-message',type:'text',text:'合成測試'}};
+ const before=f.points();await f.chat.saveEvent(f.env,event);
+ assert.equal(calls.length,1);assert.equal(calls[0].id,buyer);assert.equal(calls[0].profile.industry,'服務業');assert.equal(calls[0].profile.name,'合成自動會員');
+ assert.equal(f.row(buyer).industry,'服務業');assert.equal(f.row(buyer).role,'user');assert.equal(f.row(buyer).points,0);
+ assert.equal(f.sql.prepare('SELECT message_count FROM line_oa_threads').get().message_count,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM line_oa_messages').get().n,1);
+ assert.equal((await f.chat.saveEvent(f.env,event)).duplicate,true);assert.equal(calls.length,1);assert.equal(f.points(),before);
+});
+
+test('thread repair candidates use service industry while existing user industry remains authoritative',async t=>{
+ const f=automaticMemberFixture(t);f.thread(buyer);f.seed(other,'LINE OA','tenant',876);f.thread(other);
+ const changes=f.sql.prepare('SELECT total_changes() n').get().n,before=f.points();
+ const preview=await f.point.repairPointWalletSearchIndex({dryRun:true},f.env);
+ assert.equal(preview.data.candidates.find(row=>row.userId===buyer).profile.industry,'服務業');
+ assert.equal(preview.data.candidates.find(row=>row.userId===other).profile.industry,'LINE OA');assert.equal(f.sql.prepare('SELECT total_changes() n').get().n,changes);
+ const repaired=await f.point.repairPointWalletSearchIndex({},f.env);assert.equal(repaired.data.failedCount,0);assert.equal(repaired.data.repairedCount,2);
+ assert.equal(f.row(buyer).industry,'服務業');assert.equal(f.row(other).industry,'LINE OA');assert.equal(f.row(other).role,'tenant');assert.equal(f.row(other).points,876);assert.equal(f.points(),before);
+});
+
+test('thread customer search displays service only when no existing industry is available and stays read-only',async t=>{
+ const f=automaticMemberFixture(t);f.thread(buyer);f.seed(other,'LINE OA','tenant',876);f.thread(other);f.seed(sponsor,'醫療業');f.thread(sponsor);
+ const changes=f.sql.prepare('SELECT total_changes() n').get().n;
+ const result=await f.point.findStorePointCustomerCandidates(f.env,'合成對話');
+ assert.equal(result.matches.find(row=>row.id===buyer).industry,'服務業');assert.equal(result.matches.find(row=>row.id===other).industry,'LINE OA');assert.equal(result.matches.find(row=>row.id===sponsor).industry,'醫療業');
+ assert.equal(f.sql.prepare('SELECT total_changes() n').get().n,changes);
+});
+
+test('actual profile writer defaults a new empty industry, honors self input and leaves existing empty or legacy industry intact',async t=>{
+ const f=automaticMemberFixture(t),before=f.points();
+ let result=await f.write.upsertUser({userId:buyer,name:'新合成會員',role:'store'},f.env);
+ assert.equal(result.success,true);assert.equal(f.row(buyer).industry,'服務業');assert.equal(result.data.info.industry,'服務業');assert.equal(f.row(buyer).role,'user');
+ result=await f.write.upsertUser({userId:other,name:'自填合成會員',industry:'資訊業'},f.env);assert.equal(result.success,true);assert.equal(f.row(other).industry,'資訊業');
+ for(const [id,industry,role] of [[sponsor,'','redeem'],[uid('d'),'LINE OA','tenant']]){
+  f.seed(id,industry,role,876);assert.equal((await f.write.upsertUser({userId:id,name:'更新姓名',industry:''},f.env)).success,true);
+  assert.equal(f.row(id).industry,industry);assert.equal(f.row(id).role,role);assert.equal(f.row(id).points,876);
+ }
+ assert.equal(f.points(),before);
 });

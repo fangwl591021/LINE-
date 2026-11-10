@@ -11,6 +11,7 @@
 5. 點數 UID 橋接不可因為 LIFF ID 相同就被清除。
 6. 查詢點數時必須優先使用 `ACTMASTER_POINT_UID_{userId}` 或網址中的 `pt_uid` / `wallet_uid` / `pointUserId` / `LINE_user_id`，最後才退回 `userId`。
 7. Worker 的 `queryUserPoints` 若只收到目前 LIFF `userId`，必須再經過 D1 `point_line_id` / canonical identity 橋接後才查 wetw-point。
+8. 2026-11-10：註冊表單產業預填「服務業」；新建會員未提供產業、LINE OA自動建檔及空產業顯示fallback使用「服務業」。使用者明確填寫的產業優先，既有會員產業不因套用預設而覆蓋（包含舊「LINE OA」）；不改身分來源標記、註冊資格、角色或點數流程。
 
 ## 部署前檢查
 

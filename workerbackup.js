@@ -2260,7 +2260,7 @@ const LineOAChatModule = {
       ? await PointModule.ensureLocalPointWalletIndexFast(env, userId, {
           name: displayName,
           displayName,
-          industry: 'LINE OA',
+          industry: '服務業',
           networkId: 'admin'
         }).catch(e => ({ success: false, error: e.message || String(e) }))
       : null;
@@ -5455,7 +5455,7 @@ const PointModule = {
         id,
         id,
         D1ReadModule.text(profile.name || profile.displayName),
-        D1ReadModule.text(profile.industry || profile.title || profile.companyName || 'LINE OA'),
+        D1ReadModule.text(profile.industry || profile.title || profile.companyName || '服務業'),
         D1ReadModule.text(profile.phone || profile.mobile),
         D1ReadModule.text(profile.networkId || 'admin'),
         id
@@ -5464,7 +5464,7 @@ const PointModule = {
     } catch (e) {
       return await this.ensureLocalPointWallet(env, id, {
         ...profile,
-        industry: profile.industry || profile.title || profile.companyName || 'LINE OA',
+        industry: profile.industry || profile.title || profile.companyName || '服務業',
         networkId: profile.networkId || 'admin'
       });
     }
@@ -5972,7 +5972,7 @@ const PointModule = {
         card: null,
         name: D1ReadModule.text(user && user.name) || D1ReadModule.text(row.display_name) || rawId,
         phone: D1ReadModule.text(user && user.phone),
-        industry: D1ReadModule.text(user && user.industry) || 'LINE OA',
+        industry: D1ReadModule.text(user && user.industry) || '服務業',
         avatarUrl: D1ReadModule.text(row.picture_url),
         needsBinding: false
       });
@@ -6766,7 +6766,7 @@ const PointModule = {
       addCandidate('line_oa_threads', row.user_id, {
         name: row.display_name,
         avatarUrl: row.picture_url,
-        industry: 'LINE OA',
+        industry: '服務業',
         networkId: 'admin'
       });
     }
@@ -10737,6 +10737,7 @@ const D1WriteModule = {
     if (options.rewardActor && options.rewardActor !== user.line_id) return {success:false,error:'會員身分不符'};
     const data = payload.data || payload.profile || payload;
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.line_id]);
+    if (!existing && !user.industry) user.industry = '服務業';
     if (options.createOnly && existing) {
       return { success: true, data: { isRegistered: true, info: D1ReadModule.userRow(existing), existed: true } };
     }
