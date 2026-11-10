@@ -149,6 +149,7 @@ const Core = (function() {
     };
 
     window.fetchAPI = async function(action, payload = {}, silent = false) {
+        let timeoutId;
         try {
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
                 throw new Error('目前裝置沒有網路連線，請確認 Wi-Fi 或行動網路後重試');
@@ -190,16 +191,17 @@ const Core = (function() {
                 ? 10000
                 : (action === 'generateCardCopy' ? 100000 : (action === 'recognizeCardWithGPT4o' ? 70000
                     : (action === 'savePointRedemptionPartner' ? 65000 : (action === 'refreshCardHarvestMatches' ? 45000 : (customerImportLongActions.includes(action) ? 60000 : 18000)))));
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch(Config.WORKER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, payload: safePayload }),
                 signal: controller.signal
             });
-            clearTimeout(timeoutId);
-
-            const data = await res.json().catch(() => null);
+            const data = await res.json().catch(error => {
+                if (error?.name === 'AbortError') throw error;
+                return null;
+            });
             if (!res.ok) {
                 throw new Error(data?.error || data?.message || ('伺服器暫時無法連線 (' + res.status + ')，請稍後重試'));
             }
@@ -225,6 +227,8 @@ const Core = (function() {
             }
             if (!silent) window.showToast(message, true);
             return { success: false, error: message };
+        } finally {
+            if (timeoutId !== undefined) clearTimeout(timeoutId);
         }
     };
 

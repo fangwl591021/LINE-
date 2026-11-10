@@ -54,6 +54,8 @@ const fullChecks = [
   'test/reward-catalog.test.mjs',
   'test/store-navigation.test.mjs',
   'test/retail-seller-eligibility.test.mjs',
+  'test/core-request-deadline.test.mjs',
+  'test/store-home-log-performance.test.mjs',
   'test/public-profile-role-boundary.test.mjs',
   'test/reward-unit-directory.test.mjs',
   'test/reward-unit-ui.test.mjs',

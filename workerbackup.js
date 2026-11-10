@@ -6665,21 +6665,31 @@ const PointModule = {
       LIMIT ?
     `, binds);
 
-    const list = [];
-    for (const row of rows) {
-      const customerId = D1ReadModule.text(row.customer_point_user_id || row.customer_user_id);
-      const identity = customerId ? await D1ReadModule.findUserByIdentity(env, customerId).catch(() => null) : null;
-      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
-      let card = null;
-      if (customerId) {
-        card = await D1ReadModule.first(env, `
+    // Customer presentation is reused only within this request. Keep the log
+    // query/scope and row order intact while bounding independent reads to four.
+    const customerIds = [...new Set(rows.map(row => D1ReadModule.text(row.customer_point_user_id || row.customer_user_id)))].filter(Boolean);
+    const customers = new Map();
+    let nextCustomer = 0;
+    const loadCustomers = async () => {
+      while (nextCustomer < customerIds.length) {
+        const customerId = customerIds[nextCustomer++];
+        const identity = await D1ReadModule.findUserByIdentity(env, customerId).catch(() => null);
+        const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+        const card = await D1ReadModule.first(env, `
           SELECT * FROM card_contacts
           WHERE line_id = ? OR creator_id = ?
           ORDER BY COALESCE(updated_at, created_at) DESC
           LIMIT 1
         `, [customerId, customerId]).catch(() => null);
+        customers.set(customerId, { user, mappedCard: D1ReadModule.cardRow(card) });
       }
-      const mappedCard = D1ReadModule.cardRow(card);
+    };
+    await Promise.all(Array.from({ length: Math.min(4, customerIds.length) }, () => loadCustomers()));
+
+    const list = [];
+    for (const row of rows) {
+      const customerId = D1ReadModule.text(row.customer_point_user_id || row.customer_user_id);
+      const { user, mappedCard } = customers.get(customerId) || {};
       const customerName = D1ReadModule.text(user && user.name)
         || D1ReadModule.text(mappedCard && mappedCard.name)
         || D1ReadModule.text(row.customer_point_user_id, '客戶');
