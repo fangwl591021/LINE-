@@ -30,10 +30,10 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
   const tabs=make('nav'),store=make('button','店家資料'),products=make('button','商品／優惠'),drafts=make('button','草稿待確認');
   for(const button of [store,products,drafts])button.type='button';tabs.append(store,products,drafts);
   const confirmationHost=make('div'),body=make('div');panel.append(bar,title,note,tabs,message,confirmationHost,body);
-  let epoch=0,shop=null,onlineAllowed=false,cooperationPlan=null,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false,confirming=false,lockEditor=()=>{};
+  let epoch=0,shop=null,onlineAllowed=false,cooperationPlan=null,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false,confirming=false,lockEditor=()=>{},catalogActions=[];
   const failures=new Map();
   const setMessage=(text,failed=false)=>{message.textContent=text;message.classList.toggle('mall-catalog-error',failed);};
-  const lockNavigation=()=>{for(const button of [back,refresh,add,store,products,drafts])button.disabled=busy||confirming;};
+  const lockNavigation=()=>{for(const button of [back,refresh,add,store,products,drafts])button.disabled=busy||confirming;for(const [button,enabled]of catalogActions)button.disabled=busy||confirming||!enabled;};
   const ask=(text,yes='確認送出',no='返回修改')=>{
     if(confirming||!active())return Promise.resolve(false);
     confirming=true;lockNavigation();lockEditor();
@@ -174,9 +174,33 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       finally{busy=false;if(active()&&requestEpoch===epoch)lock();}
     };
   }
+  async function checkDraft(product){
+    if(!active()||busy||confirming||product.status!=='draft')return;
+    const requestEpoch=epoch,shopVersion=shop.version;
+    const data={type:'product',id:product.id,shop_id:shop.id,version:product.version,shop_version:shopVersion,request_key:crypto.randomUUID(),changes:{status:'active'}};
+    let completion='';let failed=false;
+    busy=true;lockNavigation();setMessage(`正在檢查「${product.title}」上架內容；只檢查，不會公開。`);
+    try{
+      const result=await api('/admin/catalog/review',data);
+      if(!active()||epoch!==requestEpoch)return;
+      if(result?.success!==true||result.id!==product.id||result.reviewed!==true||result.decision!=='allow'||result.published!==false)throw new Error('未確認檢查結果，請重新檢查。');
+      failures.delete(product.id);completion=`「${product.title}」：內容審核通過，尚未公開；實際上架仍需確認目前資格與商品名額。需要上架時，請進入編輯並確認儲存。`;
+    }catch(error){
+      if(!active()||epoch!==requestEpoch)return;
+      const structured=['reject','manual'].includes(error.review?.decision)&&Array.isArray(error.review?.issues)&&error.review.issues.length;
+      completion=`「${product.title}」：`+(structured?(error.review.decision==='manual'?'檢查待核對':'檢查未通過')+'，請核對紅字原因。':'檢查未完成，尚未判定內容違規。'+(error.message||'請稍後重試。'))+' 本次檢查不會公開商品。';failed=true;
+      failures.set(product.id,{version:product.version,shopVersion,detail:completion,review:structured?error.review:null});
+    }finally{
+      busy=false;
+      if(active()&&epoch===requestEpoch){
+        lockNavigation();const reloadEpoch=epoch+1,reloaded=await load(cursor);
+        if(active()&&epoch===reloadEpoch)setMessage(completion+(reloaded?'':' 清單讀回失敗，請重新載入。'),failed||!reloaded);
+      }
+    }
+  }
   async function load(after=''){
     if(!active()||busy)return;
-    const sequence=++epoch;dirty=false;lockEditor=()=>{};body.replaceChildren();setMessage('讀取商城資料中…');add.disabled=true;
+    const sequence=++epoch;dirty=false;lockEditor=()=>{};catalogActions=[];body.replaceChildren();setMessage('讀取商城資料中…');add.disabled=true;
     try{
       const params=new URLSearchParams({shop:shopId});if(after)params.set('after',after);if(mode==='draft')params.set('status','draft');
       const result=await api('/admin/catalog?'+params,null,true);
@@ -185,7 +209,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       shop=result.shop;onlineAllowed=result.online_product_allowed===true;cooperationPlan=result.cooperation_plan||shop.cooperation_plan||null;cursor=after;next=result.next||'';title.textContent=shop.name+'｜商城管理';add.disabled=false;
       for(const [button,key]of [[store,'store'],[products,'products'],[drafts,'draft']])button.setAttribute('aria-pressed',String(mode===key));
       setMessage(`店面：${statusName(shop.status)} · 商品 ${result.summary.total} 件 · 草稿 ${result.summary.draft} 件。`);
-      if(mode==='store'){editor('store',shop);return;}
+      if(mode==='store'){editor('store',shop);return true;}
       appendListingReview(body,shop,make);
       if(!result.products.length)body.append(make('p',mode==='draft'?'目前沒有待確認的商品草稿。':'目前沒有商品。'));
       for(const product of result.products){
@@ -195,13 +219,16 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         const failure=failures.get(product.id);
         if(failure&&failure.version===product.version&&failure.shopVersion===shop.version&&!product.listing_review&&!appendListingReview(row,{listing_review:failure.review},make)){const explanation=make('p',failure.detail);explanation.className='mall-catalog-review';row.append(explanation);}
         if(product.status!=='archived'){
-          const edit=make('button','編輯／上下架');edit.type='button';edit.onclick=()=>{if(active()&&!busy)editor('product',product);};row.append(edit);
+          const edit=make('button','編輯／上下架');edit.type='button';edit.onclick=()=>{if(active()&&!busy&&!confirming)editor('product',product);};row.append(edit);catalogActions.push([edit,true]);
+          if(product.status==='draft'){
+            const check=make('button','檢查上架內容');check.type='button';check.onclick=()=>{void checkDraft(product);};row.append(check,make('p','只檢查，不會公開；內容通過後仍需另外確認資格、名額並上架。'));catalogActions.push([check,true]);
+          }
         }else row.append(make('p','封存保留歷史，不可在此恢復。'));
         body.append(row);
       }
       const pager=make('nav'),first=make('button','回第一頁'),more=make('button','下一頁');first.type=more.type='button';first.disabled=!cursor;more.disabled=!next;
-      first.onclick=()=>void load();more.onclick=()=>void load(next);pager.append(first,more);body.append(pager);
-    }catch(error){if(active()&&sequence===epoch)setMessage((error.message||'商城讀取失敗')+'，請按重新載入。',true);}
+      first.onclick=()=>{if(!busy&&!confirming)void load();};more.onclick=()=>{if(!busy&&!confirming)void load(next);};pager.append(first,more);body.append(pager);catalogActions.push([first,!!cursor],[more,!!next]);return true;
+    }catch(error){if(active()&&sequence===epoch)setMessage((error.message||'商城讀取失敗')+'，請按重新載入。',true);return false;}
   }
   await load();
 }
