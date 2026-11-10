@@ -8,7 +8,7 @@
 
 | 介面 | 樣式來源與範圍 | 現行基準 |
 | --- | --- | --- |
-| 一般首頁 | [home-reference-theme.css](css/home-reference-theme.css)：`body.home-page:not(.business-home-v2-active)` | 薄荷底、深色文字、綠色主操作；只影響一般首頁 |
+| 一般首頁 | [home-reference-theme.css](css/home-reference-theme.css)、[home-discovery-20261110.css](css/home-discovery-20261110.css)：`body.home-page:not(.business-home-v2-active)` | 薄荷底、深色文字、綠色主操作；新版滿版，只影響一般首頁 |
 | 選用 V2 首頁 | [index.html](index.html)：`.business-home-v2-*` | 深綠與金色；保留獨立啟用條件，不套用一般首頁覆寫 |
 | 商城前台 | [store-shop.js](js/modules/store-shop.js)加入 `shop-lifestyle`、`shop-points-theme`；[store-shop.css](css/store-shop.css)後段主題覆寫 | 綠色頂部、淺色內容底、白色卡片；店家、商品及推薦卡各有版型 |
 | 店家／管理介面 | [store-admin.css](css/store-admin.css)、各管理元件 CSS | 保留各自的藍灰文字、表格與工具列，不批次換成首頁主題 |
@@ -41,7 +41,7 @@
 | 元件 | 現行數值與行為 |
 | --- | --- |
 | 一般首頁主要捷徑 | 容器圓角 `18px`、格距 `6px`；單格圓角 `12px`、最小高 `76px`、內距 `10px 2px`、圖示 `32px` |
-| 商城目前主題容器 | 最大寬 `none`；內距 `20px max(12px,env(safe-area-inset-left)) calc(105px + env(safe-area-inset-bottom))`；`760px` 起左右內距 `24px` |
+| 商城一般內容頁基礎主題容器 | 最大寬 `none`；內距 `20px max(12px,env(safe-area-inset-left)) calc(105px + env(safe-area-inset-bottom))`；`760px` 起左右內距 `24px`；新版目錄／工作台另依下方滿版規則 |
 | 商城店家／商品卡 | `.shop-discovery-grid` 店家卡兩欄、格距 `12px`、圓角 `19px`；`.shop-browse-products` 商品卡兩欄、格距 `10px`、圓角 `17px`；`700px` 起這兩類列表可為三欄，店家列表 `350px` 以下格距改 `8px` |
 | 商城首頁推薦卡 | `.points-recommended` 三欄、格距 `9px`、卡片圓角 `15px`；`760px` 起格距 `18px`，不沿用商品卡的兩欄規則 |
 | 商城操作元件 | `.shop-points-theme .shop-bar button` 最小高 `44px`；`.points-wallet-refresh` 為 `36px`。基礎按鈕的圓角 `12px`、內距 `10px 14px` 與輸入框 `44px` 最小高只在未被特定元件覆寫時沿用，不能當成所有商城按鈕規格 |
@@ -79,3 +79,7 @@
 版型中的金額、店名、圖片與方案取現有資料；統計用商品數及本月成功商品QR折抵筆數/點數，不以示意會員數或導客數代替真資料。沒有到期日期或折抵比例時不填示意值。保留原贈點/折抵角色及明確交易確認。
 
 商城標頭保留返回、品牌與切換各自的觸控區；工具列僅在店家模式顯示，店家角色切到探索目錄也必須隱藏。359px以下店家標頭將品牌另排一列，避免與返回或工具重疊。
+
+## 2026-11-10 新版滿版
+
+依使用者手機截圖要求，會員首頁、探索好店與店家工作台的背景及主要區塊左右滿版，不保留520/1120px外框封頂；移除首頁main的12px、區塊的10px側距與hidden sibling造成的24px頂部空白。品牌、會員列、橫幅、分類與快捷外框到webview內容區邊緣。文字／按鈕內距、格間距、圖片既有比例與必要safe-area仍保留；底導覽覆蓋保護不變。僅新版呈現範圍，選用V2、舊頁面、彈窗及交易表單保留原版型。

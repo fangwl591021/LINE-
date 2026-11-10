@@ -33,3 +33,17 @@
 @media(max-width:359px){.shop-reference-mode .merchant-workbench .mw-stat strong{font-size:17px}.shop-reference-mode .merchant-workbench .mw-store-identity{grid-template-columns:34px minmax(0,1fr);gap:5px}.shop-reference-mode .merchant-workbench .mw-store-photo{width:34px;height:48px}.shop-reference-mode .merchant-workbench .mw-store-copy h3{font-size:14px}.shop-reference-mode .merchant-workbench .mw-stat>span{font-size:8px}}
 @media(max-width:649px){.shop-reference-mode .merchant-workbench .mw-stat strong{font-size:17px}.shop-reference-mode .merchant-workbench .mw-stat strong small{display:block;margin:0;font-size:9px;line-height:1.2}}@media(max-width:359px){.shop-reference-mode .merchant-workbench .mw-stat strong{font-size:14px}}
 @media(max-width:359px){.shop-reference-mode>.shop-brand{padding-left:90px;padding-right:80px}.shop-reference-mode[data-points-role=merchant]>.shop-brand{min-height:118px;padding:60px 80px 8px 12px}}
+/* Full-bleed reference pages: backgrounds reach the viewport; safe areas protect content. */
+.store-shop.shop-points-theme.shop-reference-mode{--reference-safe-left:env(safe-area-inset-left,0px);--reference-safe-right:env(safe-area-inset-right,0px);width:100%}
+.store-shop.shop-points-theme.shop-reference-mode>.shop-content{width:100%;max-width:none;margin:0}
+.store-shop.shop-points-theme.shop-reference-mode>.shop-brand{max-width:none}
+.store-shop.shop-points-theme.shop-reference-mode>.shop-home-return{left:max(12px,var(--reference-safe-left))}
+.store-shop.shop-points-theme.shop-reference-mode .shop-explore-view{box-sizing:border-box;width:100%;max-width:none;margin:0;padding-left:var(--reference-safe-left);padding-right:var(--reference-safe-right)}
+.store-shop.shop-points-theme.shop-reference-mode .shop-explore-hero{border-radius:0}
+.store-shop.shop-points-theme.shop-reference-mode .shop-explore-list-heading,.store-shop.shop-points-theme.shop-reference-mode .shop-explore-footnote{padding-left:12px;padding-right:12px}
+.store-shop.shop-points-theme.shop-reference-mode .merchant-workbench{max-width:none;padding-left:var(--reference-safe-left);padding-right:var(--reference-safe-right);border-radius:0}
+.store-shop.shop-points-theme.shop-reference-mode .mw-heading{padding-left:12px;padding-right:12px}
+.store-shop.shop-points-theme.shop-reference-mode .mw-plan-details{margin-left:0;margin-right:0;padding-left:12px;padding-right:12px}
+.store-shop.shop-points-theme.shop-reference-mode[data-points-role=merchant] .shop-shell-tools{right:max(8px,var(--reference-safe-right))}
+.store-shop.shop-points-theme.shop-reference-mode>.shop-brand .points-view-switch{right:max(12px,var(--reference-safe-right))}
+@media(min-width:760px){.store-shop.shop-points-theme.shop-reference-mode>.shop-home-return{left:max(24px,var(--reference-safe-left))}}
