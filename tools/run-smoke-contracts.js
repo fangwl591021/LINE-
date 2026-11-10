@@ -112,6 +112,7 @@ const fullChecks = [
   'test/business-richman.test.mjs',
   'test/store-richman.test.mjs',
   'test/store-admin-catalog.test.mjs',
+  'test/store-admin-catalog-feedback.test.mjs',
   'test/store-single-product-release.test.mjs',
   'test/scanned-card-contacts.test.mjs',
   'test/gomoku.test.mjs',

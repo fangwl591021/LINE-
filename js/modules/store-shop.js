@@ -215,7 +215,7 @@
       if(!owner||!token)throw new Error('請先使用管理員帳號登入');
       pageKind('admin-drafts');const version=++epoch;alert.textContent='';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=9');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=10');if(!current())return;
       await module.mountAdminDrafts(content,{api,isCurrent:current,onBack:()=>run(()=>adminStores()),onManageCatalog:id=>run(()=>adminCatalog(id,'draft'))});
     }
     async function adminCatalog(id,initialMode='products') {
@@ -225,7 +225,7 @@
       pageKind('admin-catalog');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入商城管理…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=9');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=10');if(!current())return;
       await module.mountAdminCatalog(content,{shopId:id,initialMode,api,isCurrent:current,onBack:()=>run(()=>adminStores()),onUploadProducts:shopId=>run(()=>adminProducts(shopId)),prepareImage,
         uploadImage:async base64Image=>{
           if(!current())throw new Error('登入或頁面已變更');
@@ -265,7 +265,7 @@
       const reviewing=data&&['/store','/product','/admin/catalog','/admin/products'].includes(path);
       const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:path==='/polish-intro'?30000:15000)});
       const result=await response.json();
-      if(!response.ok||!result.success){const error=new Error(result.error||'商城操作失敗');error.code=result.code;throw error;}
+      if(!response.ok||!result.success){const error=new Error(result.error||'商城操作失敗');error.code=result.code;error.status=response.status;error.review=result.review;throw error;}
       return result;
     }
     function shopLink(id) {

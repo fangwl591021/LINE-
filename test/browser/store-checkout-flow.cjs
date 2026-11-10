@@ -92,7 +92,7 @@ async function main(){
     return {success:true,shop:{id:'shop-a',name:'合成店家',status:'active',version:1},online_product_allowed:true,summary:{total:1,draft:0},products:[{id:'p-b',shop_id:'shop-a',title:'合成商品',description:'',category:'購',image_url:'',price_cents:1180000,status:'active',version:1,purchase_mode:'in_store'}]};
    }});
   });
-  await page.getByRole('button',{name:'編輯／上下架'}).click();await page.locator('[name=purchase_mode]').selectOption('online');await page.getByRole('button',{name:'確認儲存',exact:true}).click();
+  await page.getByRole('button',{name:'編輯／上下架'}).click();await page.locator('[name=purchase_mode]').selectOption('online');await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('button',{name:'確認送出',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('[role=status]').textContent.includes('銷售方式仍為「限店內」'));
   await page.screenshot({path:path.join(output,'review-not-saved.png'),fullPage:true});
   await page.close();

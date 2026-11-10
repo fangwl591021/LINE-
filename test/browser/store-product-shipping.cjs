@@ -59,7 +59,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
    });
    await page.evaluate(async()=>{document.body.innerHTML='<main id="catalog"></main>';const {mountAdminCatalog}=await import('/js/modules/store-admin-catalog.js');await mountAdminCatalog(document.getElementById('catalog'),{shopId:'shop-a',isCurrent:()=>true,onBack(){},onUploadProducts(){},api:window.shippingAdminApi});});
    await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();assert.equal(await page.locator('[name=shipping_fee]').inputValue(),String(fee));
-   await page.locator('[name=shipping_fee]').fill('75');await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[role=status]').textContent.includes('已儲存'));
+   await page.locator('[name=shipping_fee]').fill('75');await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('button',{name:'確認送出',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[role=status]').textContent.includes('已儲存'));
    assert.equal(adminWrites[0].changes.shipping_fee_cents,7500);assert.equal(adminWrites[0].changes.price_cents,1180000);assert.equal(adminWrites[0].changes.redeem_type,'percent');assert.equal(adminWrites[0].changes.redeem_value,50);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    results.push({width,unitShipping:fee,quantity:2,freeOtherProduct:true,shippingTotal:fee*2,cash:32400+fee*2-50,ownerSaved:true,adminSaved:true,quoteDebit:false,syntheticDebitRefundOnce:true,noBuyerFeeInput:true,noOverflow:true,productionWrites:0});

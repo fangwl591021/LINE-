@@ -64,7 +64,7 @@ function setup(){
     loadCatalog:async()=>({mountAdminCatalog:async(_node,options)=>state.catalogs.push(options),mountAdminDrafts:async(_node,options)=>state.drafts.push(options)}),
     loadModule:async()=>{state.loads++;return {mountStoreAdmin:async(_node,options)=>state.mounts.push(options)};}};
   context.view=async id=>{context.epoch++;context.viewedShop={id};root.dataset.shopView='store';};
-  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=5')",'await loadModule()').replaceAll("await import('./store-admin-catalog.js?v=9')",'await loadCatalog()');
+  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=5')",'await loadModule()').replace(/await import\('\.\/store-admin-catalog\.js\?v=\d+'\)/g,'await loadCatalog()');
   context.open=vm.runInNewContext(code+';adminStores',context);
   return {state,context,window,root,content};
 }

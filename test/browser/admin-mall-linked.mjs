@@ -58,7 +58,7 @@ try{
   await page.evaluate(()=>{window.failUpload=false;});
   await page.locator('input[name=title]').fill('<img src=x onerror=alert(1)> 測試名稱');
   await page.locator('select[name=status]').selectOption('active');
-  await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'模擬回應遺失'}).waitFor();
+  await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('button',{name:'確認送出',exact:true}).click();await page.getByRole('status').filter({hasText:'模擬回應遺失'}).waitFor();
   assert.equal(await page.locator('input[name=title]').isDisabled(),true);
   await page.getByRole('button',{name:'重新確認同一筆儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();
   assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);

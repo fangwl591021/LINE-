@@ -59,7 +59,7 @@ try{
   assert.equal(await page.locator('[name=redeem_type]').inputValue(),'none');assert.equal(await page.locator('[name=purchase_mode]').inputValue(),'online');
   await page.locator('[name=status]').selectOption('active');await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'上架商品必須提供購物金折抵'}).waitFor();assert.equal(f.count('store_catalog_admin_audit'),0);
   await page.locator('[name=redeem_type]').selectOption('percent');await page.locator('[name=redeem_value]').fill('25');await page.screenshot({path:join(out,'admin-policy-'+width+'.png'),fullPage:true});
-  await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();
+  await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('button',{name:'確認送出',exact:true}).click();await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();
   await page.goto(origin+'/?mode=catalog');await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();assert.equal(await page.locator('[name=redeem_type]').inputValue(),'percent');assert.equal(await page.locator('[name=redeem_value]').inputValue(),'25');
   product=f.sql.prepare('SELECT * FROM store_shop_products').get();assert.equal(product.status,'active');assert.equal(product.redeem_value,25);assert.equal(product.version,2);
   const published=await f.call('?shop='+SHOP,undefined,'');assert.equal(published.products[0].redeem_value,25);assert.equal(published.products[0].purchase_mode,'online');
