@@ -29,9 +29,9 @@ function fixture(extra={}){
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 async function loaded(extra={}){const f=fixture(extra);await f.mount();return f;}
 function fill(f){f.field('title').value='測試商品';f.field('price').value='123.45';f.field('category').value='食';f.field('confirm').checked=true;}
-test('explicit target, authenticated lazy read, draft default, no owner UID input',async()=>{
+test('explicit target, authenticated lazy read, active default, no owner UID input',async()=>{
   const f=await loaded();assert.deepEqual(f.calls,[{path:'/admin/products?shop='+ID,data:null,privateRead:true}]);
-  assert.match(f.text(),/代上傳商品｜選定店家/);assert.match(f.text(),/負責人：店主/);assert.equal(f.field('status').value,'draft');assert.equal(f.field('owner_uid'),undefined);
+  assert.match(f.text(),/代上傳商品｜選定店家/);assert.match(f.text(),/負責人：店主/);assert.equal(f.field('status').value,'active');assert.equal(f.field('owner_uid'),undefined);
   assert.equal(f.field('redeem_value').disabled,true);assert.equal(f.field('confirm').required,true);
 });
 test('validates required fields and monetary precision before creating request key',async()=>{
@@ -44,8 +44,8 @@ test('uploads then creates exactly once with selected shop and original image',a
   const f=await loaded();fill(f);f.field('image_file').files=[{name:'test.png'}];await f.field('image_file').fire('change');
   assert.equal(f.uploads.length,1);assert.match(f.text(),/圖片已上傳/);
   const event=await f.form().fire('submit');assert.equal(event.prevented,true);assert.equal(event.stopped,true);
-  const sent=f.calls[1].data;assert.equal(sent.shop_id,ID);assert.equal(sent.shop_version,3);assert.equal(sent.image_url,'https://img.test/item.jpg');assert.equal(sent.price_cents,12345);assert.equal(sent.status,'draft');assert.equal('owner_uid'in sent,false);
-  await f.form().fire('submit');assert.equal(f.calls.length,2);assert.equal(f.save().disabled,true);assert.match(f.text(),/已為「選定店家」新增商品（草稿）/);
+  const sent=f.calls[1].data;assert.equal(sent.shop_id,ID);assert.equal(sent.shop_version,3);assert.equal(sent.image_url,'https://img.test/item.jpg');assert.equal(sent.price_cents,12345);assert.equal(sent.status,'active');assert.equal('owner_uid'in sent,false);
+  await f.form().fire('submit');assert.equal(f.calls.length,2);assert.equal(f.save().disabled,true);assert.match(f.text(),/已為「選定店家」新增商品（已上架）/);
 });
 test('double click is suppressed and uncertain retry keeps identical frozen request',async()=>{
   const wait=deferred();let writes=0;const sent=[];

@@ -46,14 +46,15 @@ try{
   reset(width===390?'扣點用戶':'redeem');const beforeUsers=f.sql.prepare('SELECT * FROM users ORDER BY row_id').all(),page=await browser.newPage({viewport:{width,height:900}});
   page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
   await page.route('**/*',route=>{if(new URL(route.request().url()).origin!==origin){external.push(route.request().url());return route.abort();}return route.continue();});
-  await page.goto(origin+'/?mode=owner');await page.locator('[data-do=new]').click();assert.equal(await page.locator('[data-form=product] [name=purchase_mode]').inputValue(),'');assert.equal(await page.locator('[data-form=product] [name=redeem_type]').inputValue(),'');
+  await page.goto(origin+'/?mode=owner');await page.locator('[data-do=new]').click();assert.equal(await page.locator('[data-form=product] [name=status]').inputValue(),'active');assert.equal(await page.locator('[data-form=product] [name=purchase_mode]').inputValue(),'');assert.equal(await page.locator('[data-form=product] [name=redeem_type]').inputValue(),'');
   await page.goto(origin+'/?mode=create');const create=page.locator('[data-admin-product-form]');await create.waitFor();
-  assert.equal(await create.locator('[name=purchase_mode]').inputValue(),'');assert.equal(await create.locator('[name=redeem_type]').inputValue(),'');
+  assert.equal(await create.locator('[name=status]').inputValue(),'active');assert.equal(await create.locator('[name=purchase_mode]').inputValue(),'');assert.equal(await create.locator('[name=redeem_type]').inputValue(),'');
   await create.locator('[name=title]').fill('合成可折抵服務');await create.locator('[name=description]').fill('合成合法服務體驗');await create.locator('[name=price]').fill('1000');await create.locator('[name=shipping_fee]').fill('60');await create.locator('[name=category]').selectOption('服務');await create.locator('[name=confirm]').check();
   await create.locator('[name=purchase_mode]').selectOption('online');await create.locator('[name=redeem_type]').selectOption('none');await create.locator('[name=status]').selectOption('active');
   await create.locator('[data-admin-save]').click();await page.getByRole('status').filter({hasText:'上架商品必須提供購物金折抵'}).waitFor();assert.equal(f.count('store_shop_products'),0);
   await create.locator('[name=status]').selectOption('draft');await create.locator('[data-admin-save]').click();await page.getByRole('status').filter({hasText:'已為'}).waitFor();
   let product=f.sql.prepare('SELECT * FROM store_shop_products').get();assert.equal(product.redeem_type,'none');assert.equal(product.purchase_mode,'online');assert.equal(product.status,'draft');
+  await page.goto(origin+'/?mode=owner');await page.locator('[data-do=edit]').click();assert.equal(await page.locator('[data-form=product] [name=status]').inputValue(),'draft');
   await page.goto(origin+'/?mode=catalog');await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
   assert.equal(await page.locator('[name=redeem_type]').inputValue(),'none');assert.equal(await page.locator('[name=purchase_mode]').inputValue(),'online');
   await page.locator('[name=status]').selectOption('active');await page.getByRole('button',{name:'確認儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'上架商品必須提供購物金折抵'}).waitFor();assert.equal(f.count('store_catalog_admin_audit'),0);

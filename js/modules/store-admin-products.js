@@ -58,7 +58,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   const value=field('redeem_value','折抵上限（固定填點數／百分比填 1–100）','input',{type:'number',min:'0',max:'1000000',step:'1',value:'0'});
   value.disabled=true;
   fields.redeem_type.addEventListener('change',()=>{value.disabled=!['fixed','percent'].includes(fields.redeem_type.value);if(value.disabled)value.value='0';});
-  select('status','建立後狀態',[['draft','先存草稿'],['active','立即上架']]);
+  select('status','建立後狀態',[['active','立即上架'],['draft','先存草稿']]);
   form.append(make('p','上架需經平台 AI 審核文案與圖片。八大行業、詐騙、菸酒、醫療用品、犯罪、色情與賭博禁止上架；疑似或服務未完成不公開，可先存草稿。'));
   const confirm=field('confirm','我已確認資料與目標店家：'+shop.name,'input',{type:'checkbox',required:true});
   const save=make('button','確認新增商品');save.type='submit';save.className='primary';save.setAttribute('data-admin-save','');form.append(save);
