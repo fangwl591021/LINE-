@@ -6,6 +6,7 @@ const root = new URL('../', import.meta.url);
 const html = readFileSync(new URL('index.html', root), 'utf8');
 const themeUrl = new URL('css/home-reference-theme.css', root);
 const css = readFileSync(themeUrl, 'utf8');
+const discoveryCss = readFileSync(new URL('css/home-discovery-20261110.css', root), 'utf8');
 const scope = 'body.home-page:not(.business-home-v2-active)';
 const shortcutStart = html.indexOf('id="home-primary-shortcuts"');
 // The tutorial banner is a sibling, not a ninth primary shortcut.
@@ -13,13 +14,12 @@ const shortcutEnd = html.indexOf('id="home-tutorial-entry"', shortcutStart);
 const shortcuts = html.slice(shortcutStart, shortcutEnd);
 const shortcutElements = [...shortcuts.matchAll(/<(button|a)\b[\s\S]*?<\/\1>/g)].map(match => match[0]);
 
-test('compact home removes top sibling space and the empty-switch line box without hiding controls', () => {
+test('the home palette keeps its readable controls and the empty-switch line box fix', () => {
   const rule = selector => {
     const start = css.indexOf(`${scope} ${selector} {`);
     assert.ok(start >= 0, `missing scoped rule for ${selector}`);
     return css.slice(start, css.indexOf('}', start) + 1);
   };
-  assert.match(rule('#main'), /padding:\s*0 12px 100px;/);
   assert.match(rule('#home-profile-card'), /margin:\s*0;/);
   assert.match(rule('#home-profile-card'), /display:\s*flex;/);
   assert.match(rule('#home-profile-card'), /flex-direction:\s*column;/);
@@ -31,6 +31,37 @@ test('compact home removes top sibling space and the empty-switch line box witho
   assert.match(rule('#home-primary-shortcuts .home-quick-circle'), /min-height:\s*76px;/);
   assert.doesNotMatch(css, /#home-top-nav-switch[^{}]*\{[^}]*display:\s*none/);
   assert.match(html, /home-reference-theme\.css\?v=2/);
+});
+
+test('full-width home overrides the shared frame without changing the opt-in V2 or image crop', () => {
+  const rule = selector => {
+    const rules = discoveryCss.split(/\r?\n/).filter(line => line.startsWith(`${scope} ${selector} {`));
+    assert.ok(rules.length, `missing home-only full-width rule for ${selector}`);
+    return rules.join('\n');
+  };
+  assert.ok(html.indexOf('css/home-discovery-20261110.css') > html.indexOf('css/home-reference-theme.css'), 'the home override loads after its base theme');
+  for (const selector of ['#app', '#main', '#home-discovery-bottom']) {
+    assert.match(rule(selector), /width:\s*100%/);
+    assert.match(rule(selector), /max-width:\s*none/);
+  }
+  assert.match(rule('#main'), /padding:\s*0 0 110px/);
+  assert.match(rule('.home-discovery-header'), /margin:\s*0!important/);
+  assert.match(rule('#home-profile-card'), /margin:\s*0!important/);
+  for (const selector of ['#home-mall-banner', '#home-shop-categories', '#home-primary-shortcuts', '.home-lower-panel', '.home-teaching-row']) {
+    assert.match(rule(selector), /margin:\s*\d+px 0(?: 0)?[;}]/, `${selector} reaches both edges`);
+  }
+  assert.match(rule('.home-discovery-header>button'), /min-width:\s*44px/);
+  assert.match(rule('.home-discovery-header>button'), /min-height:\s*44px/);
+  assert.match(rule('.home-discovery-brand small'), /white-space:\s*normal/);
+  assert.match(rule('#home-primary-shortcuts'), /padding:\s*7px/);
+  assert.match(rule('.home-lower-panel'), /padding:\s*12px/);
+  assert.match(rule('#home-mall-banner img'), /aspect-ratio:\s*3\/1;object-fit:\s*cover/);
+  for (const selector of ['.home-discovery-header', '#home-profile-card>.grid', '#home-discovery-bottom']) {
+    assert.match(rule(selector), /env\(safe-area-inset-left\)/);
+    assert.match(rule(selector), /env\(safe-area-inset-right\)/);
+  }
+  assert.match(rule('#home-discovery-bottom'), /env\(safe-area-inset-bottom\)/);
+  assert.match(rule('#home-discovery-bottom button'), /min-height:\s*44px/);
 });
 
 test('reference palette loads a local cache-versioned stylesheet only for the real home', () => {

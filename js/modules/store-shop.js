@@ -145,7 +145,7 @@
     const initialProductCurrent=()=>!initialProductSession||(root.isConnected&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'&&initialProductSession.owner===window.currentUserProfile?.userId&&initialProductSession.role===window.userRole&&initialProductSession.token===window.liff?.getAccessToken?.());
     root.classList.add('shop-lifestyle','shop-points-theme');
     for(const [id,file]of [['store-reference-shell-css','store-reference-shell'],['store-explore-view-css','store-explore-view'],['store-merchant-workbench-css','store-merchant-workbench']]){
-      if(!document.getElementById(id)){const link=document.createElement('link');link.id=id;link.rel='stylesheet';link.href='css/'+file+'.css?v='+(file==='store-reference-shell'?'2':'1');document.head.appendChild(link);}
+      if(!document.getElementById(id)){const link=document.createElement('link');link.id=id;link.rel='stylesheet';link.href='css/'+file+'.css?v='+(file==='store-reference-shell'?'3':'1');document.head.appendChild(link);}
     }
     root.querySelector('h1').textContent='生活好店';
     root.insertAdjacentHTML('afterbegin','<nav class="shop-home-return" aria-label="返回主首頁"><button type="button" data-do="exit"><span aria-hidden="true">‹</span>回主首頁</button></nav><header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark"><img src="assets/points-logo-transparent-20260916.png" width="1254" height="1254" alt="" decoding="async"></span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
