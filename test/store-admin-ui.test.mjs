@@ -60,7 +60,7 @@ test('awaits first authenticated read, renders compact totals and useful owner d
   assert.equal(s.root.querySelector('[data-admin-count=total]').textContent,'5');assert.match(s.root.textContent,/負責人：店主/);assert.match(s.root.textContent,/商品 2 \/ 3網購 1/);
   assert.doesNotMatch(s.root.textContent,/U_PRIVATE/);assert.equal(s.root.querySelector('.store-admin-list').getAttribute('aria-busy'),'false');
   assert.equal(s.action('previous').disabled,true);assert.equal(s.action('next').disabled,true);
-  assert.equal(s.doc.head.children[0].href,'https://example.test/LINE-/css/store-admin.css?v=2');
+  assert.equal(s.doc.head.children[0].href,'https://example.test/LINE-/css/store-admin.css?v=3');
 });
 test('all server text is textContent, only explicitly public valid shops get view actions',async()=>{
   const s=await loaded(report({shops:[shop({name:'<img src=x onerror=alert(1)>',owner_name:'<script>bad()</script>'}),shop({id:B,status:'draft',public_visible:false,owner_name:''}),shop({id:'javascript:alert(1)',public_visible:true}),shop({id:B,public_visible:false})]}));

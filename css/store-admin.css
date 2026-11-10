@@ -8,7 +8,7 @@
 .store-admin form.store-admin-search{display:grid;grid-template-columns:minmax(0,1fr) 135px auto;align-items:end;gap:10px;margin:0}
 .store-admin .store-admin-search label{display:flex;flex-direction:column;gap:5px;font-size:.85rem;margin:0;min-width:0}
 .store-admin .store-admin-search input,.store-admin .store-admin-search select{box-sizing:border-box;min-width:0;width:100%;height:44px;padding:8px 10px;border:1px solid #c6d2d7;border-radius:10px;background:#fff;color:#173e59;font:inherit}
-.store-admin button{min-height:42px;padding:8px 13px;border:1px solid #c6d2d7;border-radius:10px;color:#173e59;background:#fff;font:inherit;cursor:pointer;white-space:nowrap}
+.store-admin button{min-height:44px;padding:8px 13px;border:1px solid #c6d2d7;border-radius:10px;color:#173e59;background:#fff;font:inherit;cursor:pointer;white-space:nowrap}
 .store-admin button:disabled{opacity:.45;cursor:default}.store-admin button:focus-visible,.store-admin input:focus-visible,.store-admin select:focus-visible{outline:3px solid #eaa72f;outline-offset:2px}
 .store-admin [data-admin-action=search]{background:#173e59;color:#fff;min-height:44px}
 .store-admin .store-admin-status{font-size:.85rem;color:#637989;margin:12px 0;min-height:1.2em}
@@ -21,7 +21,13 @@
 .store-admin .store-admin-badge.is-active{color:#087854;background:#e8f6ec}.store-admin .store-admin-badge.is-hidden{color:#a75d1f;background:#fff2df}
 .store-admin .store-admin-owner{font-size:.88rem;margin:5px 0 0}.store-admin .store-admin-contact{font-size:.78rem;color:#687c8b;margin:4px 0 0;line-height:1.5}
 .store-admin .store-admin-products{display:flex;flex-wrap:wrap;gap:5px 14px;font-size:.8rem;color:#61798b;margin:6px 0 0}
+.store-admin .store-admin-pin-control{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex:0 1 190px;min-width:0;max-width:100%}
+.store-admin .store-admin-pin-label{box-sizing:border-box;display:flex;align-items:center;gap:8px;min-width:76px;min-height:44px;margin:0;padding:6px 10px;border:1px solid #b8d3ce;border-radius:10px;color:#12614f;cursor:pointer}
+.store-admin .store-admin-pin-label input{box-sizing:border-box;flex:0 0 22px;width:22px;min-width:22px;height:22px;min-height:22px;padding:0;margin:0;accent-color:#00866b;cursor:pointer}
+.store-admin .store-admin-pin-label input:disabled{cursor:default}.store-admin .store-admin-pin-status{font-size:.78rem;line-height:1.5;margin:0;color:#12614f;overflow-wrap:anywhere}.store-admin .store-admin-pin-status:empty{display:none}.store-admin .store-admin-pin-status.is-error{color:#b42318}
+.store-admin [data-admin-action=pin-retry]{max-width:100%;white-space:normal}
 .store-admin .store-admin-unavailable{font-size:.75rem;color:#8594a0;max-width:70px;text-align:center;flex-shrink:0}
 .store-admin .store-admin-empty{padding:24px 10px;text-align:center;color:#718291;background:#fff;border-radius:12px}
 .store-admin .store-admin-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px}.store-admin .store-admin-pager span{font-size:.85rem}
 @media(max-width:520px){.store-admin form.store-admin-search{grid-template-columns:minmax(0,1fr) auto;gap:8px}.store-admin .store-admin-query{grid-column:1/-1}.store-admin .store-admin-total{padding:9px;flex-direction:column;align-items:flex-start;gap:3px}.store-admin article.store-admin-card{padding:11px 10px;gap:8px}.store-admin [data-admin-action=view]{font-size:.78rem;padding:8px}.store-admin .store-admin-toolbar button{font-size:.88rem}.store-admin .store-admin-contact{font-size:.77rem}}
+@media(max-width:520px){.store-admin article.store-admin-card:has(.store-admin-pin-control)>.store-admin-main{flex:1 0 100%}}
