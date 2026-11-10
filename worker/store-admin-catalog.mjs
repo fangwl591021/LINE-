@@ -5,6 +5,7 @@ import {requireListingReview,ListingReviewError,listingReviewFailure,listingPoli
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
 import {RETAIL_ROLES,storePlanForRole,retailRoleSql,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
 const PATH='/v1/store-shop/admin/catalog';
+const REVIEW_PATH=PATH+'/review';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=RETAIL_ROLES;
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
@@ -69,9 +70,10 @@ async function receipt(db,key,uid,payload){
 }
 export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=fetch,releaseVerifier=verifySingleProductRelease){
   const url=new URL(request.url);
-  if(url.pathname!==PATH)return null;
+  const reviewOnly=url.pathname===REVIEW_PATH;
+  if(url.pathname!==PATH&&!reviewOnly)return null;
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
-  if(!['GET','POST'].includes(request.method))return reply({success:false,error:'不支援此商城管理操作'},405);
+  if(!(reviewOnly?['POST']:['GET','POST']).includes(request.method))return reply({success:false,error:'不支援此商城管理操作'},405);
   try{
     const {uid,db,actor}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
     if(request.method==='GET'){
@@ -106,10 +108,25 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     }
     if(url.search)fail('INVALID_QUERY','儲存不可附加查詢條件');
     const data=await readJson(request);
+    if(reviewOnly&&(!data||typeof data!=='object'||Array.isArray(data)))fail('INVALID_REQUEST','商品檢查資料不正確');
     if(Object.keys(data).some(key=>!['type','id','shop_id','version','shop_version','request_key','changes','manual_release'].includes(key))||!['store','product'].includes(data.type)||!validId(data.id)||!validId(data.shop_id)||!validId(data.request_key))fail('INVALID_REQUEST','商城儲存資料不正確');
     if(!Number.isSafeInteger(data.version)||data.version<1||data.version>1e9||!Number.isSafeInteger(data.shop_version)||data.shop_version<1||data.shop_version>1e9)fail('INVALID_VERSION','請重新載入後再修改');
     const fields=data.type==='store'?STORE:PRODUCT,changes=data.changes;
     if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Object.keys(changes).length||Object.keys(changes).some(key=>!fields.includes(key)))fail('INVALID_FIELD','僅能修改商城展示及商品折抵設定，不得變更歸屬、會員點數或訂單');
+    if(reviewOnly){
+      if(data.type!=='product'||Object.hasOwn(data,'manual_release')||Object.keys(changes).length!==1||changes.status!=='active')fail('INVALID_REQUEST','僅能檢查現有商品草稿，不得修改內容、公開或人工放行');
+      const shop=await shopRow(db,data.shop_id);
+      const original=(await rows(db,`SELECT ${PRODUCT_SELECT} FROM store_shop_products WHERE id=? AND shop_id=?`,[data.id,shop.id]))[0];
+      if(!original)fail('NOT_FOUND','查無此店家的商品',404);
+      if(original.version!==data.version||shop.version!==data.shop_version)fail('VERSION_CONFLICT','資料已更新，請重新載入後再檢查',409);
+      if(original.status!=='draft')fail('DRAFT_PRODUCT_REQUIRED','僅能檢查尚未公開的商品草稿',409);
+      const normalized=normalizeProduct({...original,status:'active'});
+      requireProductRedemption(normalized,shop.owner_role);
+      await requireListingReview({value:normalized,parent:shop,scope:'product:'+shop.id+':'+data.id,uid,env,fetcher});
+      // Review records may be saved, but this route never reads publish receipts
+      // or reaches the catalog audit/update batch, even when the review allows it.
+      return reply({success:true,id:data.id,reviewed:true,decision:'allow',published:false});
+    }
     const sorted=Object.fromEntries(fields.filter(key=>Object.hasOwn(changes,key)).map(key=>[key,changes[key]]));
     const release=Object.hasOwn(data,'manual_release')?manualReleaseConsent(data.manual_release):null;
     const payload=JSON.stringify({type:data.type,id:data.id,shop_id:data.shop_id,version:data.version,shop_version:data.shop_version,changes:sorted,...(release?{manual_release:release}:{})});

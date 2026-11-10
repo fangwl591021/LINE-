@@ -9,7 +9,7 @@ try{playwright=require('playwright');}catch{playwright=require('C:/Users/User/.c
 const out=join(tmpdir(),'catalog-review-feedback-20261110');mkdirSync(out,{recursive:true});
 const browser=await playwright.chromium.launch({channel:'chrome',headless:true});
 try{
- const page=await browser.newPage({viewport:{width:390,height:900}}),writes=[],dialogs=[],errors=[],blocked=[];
+ const page=await browser.newPage({viewport:{width:390,height:900}}),writes=[],reviews=[],dialogs=[],errors=[],blocked=[];
  page.on('dialog',d=>{dialogs.push(d.message());return d.dismiss();});page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',route=>{
   const u=new URL(route.request().url());
@@ -20,8 +20,18 @@ try{
  });
  const review={decision:'manual',reviewed_at:Date.now(),issues:[{category:'medical',field:'description',evidence:'<img src=x onerror=alert(1)>',reason:'用途資料待核對，不能確認為一般非醫療產品。'}]};
  const product={id:'product-test',shop_id:'shop-test',title:'合成待核對商品',description:'原介紹',category:'購',image_url:'',price_cents:10000,shipping_fee_cents:0,status:'draft',version:1,purchase_mode:'online',redeem_type:'percent',redeem_value:10,listing_review:review};
- let behavior='reject',includeSavedReview=true;
+ let behavior='reject',includeSavedReview=true,reviewBehavior='allow',releaseReview=null;
  await page.exposeFunction('fixtureApi',async(path,data)=>{
+  if(path==='/admin/catalog/review'){
+   reviews.push(data);
+   if(reviewBehavior==='hold')await new Promise(resolve=>{releaseReview=resolve;});
+   if(reviewBehavior==='reject'){
+    product.listing_review={...review,decision:'reject'};
+    return {success:false,test_error:{code:'LISTING_POLICY_REJECTED',message:'合成內容不符合上架政策。',review:product.listing_review}};
+   }
+   if(reviewBehavior==='unavailable')return {success:false,test_error:{code:'LISTING_REVIEW_UNAVAILABLE',message:'合成審核服務暫時無法完成'}};
+   delete product.listing_review;return {success:true,id:product.id,reviewed:true,decision:'allow',published:false};
+  }
   if(data){
    writes.push(data);
    if(behavior==='reject'){
@@ -40,7 +50,7 @@ try{
  const mount=async(queue=false)=>page.evaluate(async queue=>{
   const {mountAdminCatalog,mountAdminDrafts}=await import('/js/modules/store-admin-catalog.js');
   const api=async(...args)=>{const r=await window.fixtureApi(...args);if(r.test_error){const e=new Error(r.test_error.message);Object.assign(e,{code:r.test_error.code,review:r.test_error.review});throw e;}return r;};
-  const options={shopId:'shop-test',api,isCurrent:()=>true,onBack(){},onUploadProducts(){},onManageCatalog(){}};
+  window.fixtureCurrent=true;const options={shopId:'shop-test',api,isCurrent:()=>window.fixtureCurrent,onBack(){},onUploadProducts(){},onManageCatalog(){}};
   await (queue?mountAdminDrafts:mountAdminCatalog)(document.getElementById('catalog'),options);
  },queue);
  await mount();
@@ -50,6 +60,26 @@ try{
  assert.equal(await page.locator('.mall-catalog-review img').count(),0);
  const assertRed=async locator=>assert.equal(await locator.evaluate(e=>getComputedStyle(e).color),'rgb(180, 35, 24)');
  await assertRed(page.locator('.mall-catalog-review'));
+ const business=()=>JSON.stringify(Object.fromEntries(Object.entries(product).filter(([key])=>key!=='listing_review'))),unchanged=business();
+ reviewBehavior='hold';await page.getByRole('button',{name:'檢查上架內容',exact:true}).click();
+ await page.getByRole('status').filter({hasText:'只檢查，不會公開'}).waitFor();
+ assert.equal(reviews.length,1);assert.equal(writes.length,0);assert.equal(await page.getByRole('button',{name:'檢查上架內容',exact:true}).isDisabled(),true);
+ assert.equal(await page.getByRole('button',{name:'編輯／上下架',exact:true}).isDisabled(),true);
+ assert.equal(await page.getByRole('button',{name:'重新載入',exact:true}).isDisabled(),true);
+ await page.getByRole('button',{name:'檢查上架內容',exact:true}).click({force:true});assert.equal(reviews.length,1);
+ reviewBehavior='allow';releaseReview();await page.getByRole('status').filter({hasText:'內容審核通過，尚未公開'}).waitFor();
+ assert.deepEqual(reviews[0].changes,{status:'active'});assert.equal(reviews[0].type,'product');assert.equal(reviews[0].version,1);assert.equal(reviews[0].shop_version,1);
+ assert.equal(business(),unchanged);assert.equal(writes.length,0);assert.equal(product.status,'draft');assert.equal(await page.locator('.mall-catalog-review').count(),0);
+ reviewBehavior='reject';await page.getByRole('button',{name:'檢查上架內容',exact:true}).click();await page.getByRole('status').filter({hasText:'檢查未通過'}).waitFor();
+ await assertRed(page.getByRole('status'));assert.equal(await page.locator('.mall-catalog-review').count(),1);assert.equal(business(),unchanged);assert.equal(writes.length,0);
+ await page.getByRole('button',{name:'重新載入',exact:true}).click();await page.getByText('最近審核未通過；該次變更未公開',{exact:true}).waitFor();
+ reviewBehavior='unavailable';await page.getByRole('button',{name:'檢查上架內容',exact:true}).click();await page.getByRole('status').filter({hasText:'檢查未完成，尚未判定內容違規'}).waitFor();
+ await assertRed(page.getByRole('status'));assert.equal(business(),unchanged);assert.equal(writes.length,0);
+ reviewBehavior='hold';await page.getByRole('button',{name:'檢查上架內容',exact:true}).click();await page.getByRole('status').filter({hasText:'只檢查，不會公開'}).waitFor();
+ await page.evaluate(()=>{window.fixtureCurrent=false;document.getElementById('catalog').textContent='已離開測試商城';});reviewBehavior='allow';releaseReview();
+ await page.waitForFunction(()=>document.getElementById('catalog').textContent==='已離開測試商城');
+ await mount();assert.equal(await page.getByRole('status').innerText().then(t=>t.includes('內容審核通過')),false);
+ product.listing_review=review;await mount();
  await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
  await page.locator('[name=status]').selectOption('active');await page.getByRole('button',{name:'確認儲存',exact:true}).click();
  await page.getByRole('dialog',{name:'請確認商城操作'}).waitFor();
@@ -75,6 +105,8 @@ try{
  await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();assert.deepEqual(writes[1],writes[2]);assert.notEqual(writes[0].request_key,writes[1].request_key);
  assert.equal(await page.getByRole('status').evaluate(e=>e.classList.contains('mall-catalog-error')),false);
  assert.equal(await page.locator('.mall-catalog-review').count(),0);assert.equal(product.status,'active');
+ await page.getByRole('button',{name:'重新載入',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'檢查上架內容',exact:true}).count(),0,'only existing drafts offer review-only checking');
  for(const width of [320,390,1440]){
   product.listing_review=review;await mount();await page.setViewportSize({width,height:900});
   await page.waitForFunction(()=>!!document.getElementById('store-admin-catalog-css')?.sheet);await assertRed(page.locator('.mall-catalog-review'));
@@ -85,5 +117,5 @@ try{
   await page.getByRole('button',{name:'返回修改',exact:true}).click();
  }
  assert.deepEqual(dialogs,[]);assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
- console.log(JSON.stringify({passed:true,widths:[320,390,1440],redReasons:true,safeText:true,saveAndLeaveCancellation:true,retrySameRequest:true,noNativeDialogs:true,productionWrites:0,screenshots:out}));
+ console.log(JSON.stringify({passed:true,widths:[320,390,1440],redReasons:true,safeText:true,saveAndLeaveCancellation:true,retrySameRequest:true,noNativeDialogs:true,draftReviewOnly:true,reviewDoesNotPublish:true,reviewBusyAndLateIsolation:true,productionWrites:0,screenshots:out}));
 }finally{await browser.close();}
