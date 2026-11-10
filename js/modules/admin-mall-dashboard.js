@@ -39,7 +39,7 @@ async function loadAdminMall(){
       }});
   }
   async function upload(shopId){
-    const module=await import('./store-admin-products.js?v=5');if(!current())return;
+    const module=await import('./store-admin-products.js?v=6');if(!current())return;
     await module.mountAdminProducts(container,{shopId,api,isCurrent:current,onBack:()=>catalog(shopId),prepareImage:prepareAdminMallImage,
       uploadImage:async base64Image=>{
         await api('/admin/products?shop='+encodeURIComponent(shopId));
