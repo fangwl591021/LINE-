@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import vm from 'node:vm';
 import {runCashierRequest} from '../worker/store-cashier-requests.mjs';
 import {isRewardOnlyRole} from '../worker/reward-only-cashier.mjs';
+import {RETAIL_ROLES} from '../js/modules/store-cooperation-plans.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32);
@@ -44,7 +45,7 @@ function fixture(t) {
     });
     return stmt([]);
   }}, ACTMASTER_KV: {async put(key, value, options) { effects.push('kv-put'); sessions.push({key, value, options}); }}};
-  const context = vm.createContext({crypto, TextEncoder, URL, Date, console, isRewardOnlyRole,
+  const context = vm.createContext({crypto, TextEncoder, URL, Date, console, isRewardOnlyRole, RETAIL_ROLES,
     fetch: async () => { throw Error('Unexpected external API'); }});
   vm.runInContext([object('ACTION_POLICIES'), object('SecurityModule'), object('D1ReadModule'),
     'globalThis.read = D1ReadModule;', 'globalThis.point = {' + [

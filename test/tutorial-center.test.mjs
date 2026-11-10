@@ -10,13 +10,19 @@ const context=vm.createContext({window:{addEventListener(){}},document:{addEvent
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testCategories = categories; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
 const categories=JSON.parse(JSON.stringify(context.window.testCategories));
-test('exchange lessons follow all fourteen original movies without changing existing metadata',()=>{
+const sellerNotice='商品上架僅開放扣點店家、雙向店家與總管，加入會員不會自動取得上架資格；一般會員、贈點單位及租戶不能上架。';
+const sellerDescription='（僅扣點／雙向店家及總管）';
+// Permit only the approved merchant qualification text; retain every original media/lesson fingerprint.
+const originalMetadata=courses.map(c=>c.id==='merchant'?{...c,description:c.description.replace(sellerDescription,''),note:c.note.replace(sellerNotice,'')}:c);
+test('exchange lessons retain original metadata except the explicit merchant eligibility notice',()=>{
   assert.equal(courses.length,17);
   assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin','store-point-gift','point-redemption','friend-share','exchange-use','exchange-applications','ai-task-workflow']);
-  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,14))).digest('hex'),'4e580a6d60bdeee1be54339a5465d9cee6244c30784303509c36e28bccb4d953','all original fourteen course fields remain unchanged');
-  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,13))).digest('hex'),'128d3e8e3494120d173b96bc4321b09ae5c7659ced0301dc4180af9f2977495d','all original thirteen course fields must remain unchanged');
-  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,9))).digest('hex'),'3c7a17942e387bce6366c6be58498627a9ad0010fe276ac7f5b52b6e07226958','all original nine course fields must remain unchanged');
-  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,11))).digest('hex'),'6f80ab1c681b7a009f389cf133b068c3a26692bc2b72095ea10b7d5b534b3092','all original eleven course fields must remain unchanged');
+  assert.equal(createHash('sha256').update(JSON.stringify(originalMetadata.slice(0,14))).digest('hex'),'4e580a6d60bdeee1be54339a5465d9cee6244c30784303509c36e28bccb4d953','all original fourteen course fields remain unchanged');
+  assert.equal(createHash('sha256').update(JSON.stringify(originalMetadata.slice(0,13))).digest('hex'),'128d3e8e3494120d173b96bc4321b09ae5c7659ced0301dc4180af9f2977495d','all original thirteen course fields must remain unchanged');
+  assert.equal(createHash('sha256').update(JSON.stringify(originalMetadata.slice(0,9))).digest('hex'),'3c7a17942e387bce6366c6be58498627a9ad0010fe276ac7f5b52b6e07226958','all original nine course fields must remain unchanged');
+  assert.equal(createHash('sha256').update(JSON.stringify(originalMetadata.slice(0,11))).digest('hex'),'6f80ab1c681b7a009f389cf133b068c3a26692bc2b72095ea10b7d5b534b3092','all original eleven course fields must remain unchanged');
+  assert.equal(courses[3].note.startsWith(sellerNotice),true);
+  assert.equal(courses[3].description.endsWith(sellerDescription),true);
   assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
   assert.equal(courses[4].duration,'4:18');
   assert.match(courses[4].note,/直接點首頁「AI推進」/);

@@ -7,6 +7,7 @@ import { webcrypto } from 'node:crypto';
 import { enrichCardHarvestMatches, harvestMatchIntentContext, harvestMatchCandidateSnapshot } from '../worker/card-harvest-match.mjs';
 import { isRewardOnlyRole } from '../worker/reward-only-cashier.mjs';
 import { restoreCollectionHistory, scoreNewCollectionMatches } from '../worker/collection-match-history.mjs';
+import { RETAIL_ROLES } from '../js/modules/store-cooperation-plans.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), OLD_A = 'U' + 'c'.repeat(32);
@@ -62,7 +63,7 @@ function fixture(t) {
     ACTMASTER_KV: { put() { return reject('KV write'); }, delete() { return reject('KV delete'); } }
   };
   const context = { TextEncoder, crypto: webcrypto, console: { log() {}, warn() {}, error() {} },
-    enrichCardHarvestMatches, restoreCollectionHistory, scoreNewCollectionMatches, isRewardOnlyRole, fetch() { return reject('network'); }
+    enrichCardHarvestMatches, restoreCollectionHistory, scoreNewCollectionMatches, isRewardOnlyRole, RETAIL_ROLES, fetch() { return reject('network'); }
   };
   vm.createContext(context);
   vm.runInContext([object('ACTION_POLICIES'), object('SecurityModule'), object('AIModule'), object('D1ReadModule'),

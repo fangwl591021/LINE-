@@ -40,7 +40,27 @@ test('settings remains an independent non-submit action with the existing role b
  assert.match(source,/<button type="button" data-do="manage">商店設定<\/button>/);
  assert.doesNotMatch(source,/<button[^>]*data-do="manage"[^>]*class="primary">我的商城管理/);
  const gate=source.match(/const canManage=\(\)=>(.*);/)[1];
- for(const role of ['user','store','admin','tenant','reward','贈點用戶','redeem','扣點用戶','unknown'])for(const standalone of [true,false]){
-  assert.equal(vm.runInNewContext(gate,{window:{userRole:role},standalone}),!standalone&&['store','admin','redeem','扣點用戶'].includes(role));
+ for(const role of ['user','store','店長','admin','總管','tenant','租戶','reward','贈點用戶','redeem','扣點用戶','unknown'])for(const standalone of [true,false])for(const eligible of [true,false,undefined,'true']){
+  const window={userRole:role,currentUser:{userId:'owner',retailSellerEligible:eligible},currentUserProfile:{userId:'owner'}};
+  assert.equal(vm.runInNewContext(gate,{window,standalone}),!standalone&&eligible===true&&['store','店長','admin','總管','redeem','扣點用戶'].includes(role));
  }
+});
+
+test('normalized tenant, missing capability and mismatched profile cannot open seller controls',async()=>{
+ const gate=source.match(/const canManage=\(\)=>(.*);/)[1];
+ for(const window of [
+  {userRole:'store',currentUser:{userId:'owner',retailSellerEligible:false},currentUserProfile:{userId:'owner'}},
+  {userRole:'store',currentUser:{userId:'owner'},currentUserProfile:{userId:'owner'}},
+  {userRole:'store',currentUser:{userId:'old-owner',retailSellerEligible:true},currentUserProfile:{userId:'new-owner'}},
+  {userRole:'store',currentUser:{retailSellerEligible:true},currentUserProfile:{}},
+  {userRole:'store',currentUserProfile:{userId:'owner'}}
+ ])assert.equal(vm.runInNewContext(gate,{window,standalone:false}),false);
+ const manage=source.slice(source.indexOf('    async function manage()'),source.indexOf('    function edit('));
+ for(const allowed of [false,true]){
+  const calls=[],context={canManage:()=>allowed,pageKind(){calls.push('page');},epoch:0,alert:{},content:{innerHTML:''},window:{currentUserProfile:{userId:'owner'},liff:{getAccessToken:()=> 'token'},userRole:'store'},cardImportAdminOwner:null,canAdmin:()=>false,api:async()=>{calls.push('api');return {};},root:{isConnected:true},setManagement(){},renderManage(){}};
+  if(!allowed)await assert.rejects(vm.runInNewContext(manage+';manage()',context),/加入會員不會自動取得上架資格/);
+  else await vm.runInNewContext(manage+';manage()',context);
+  assert.deepEqual(calls,allowed?['page','api']:[]);
+ }
+ assert.match(source,/加入會員不會自動取得上架資格/);
 });

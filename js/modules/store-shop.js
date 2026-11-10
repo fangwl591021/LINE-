@@ -82,7 +82,7 @@
     const initialShopId = standalone ? new URL(location.href).searchParams.get('shop') || '' : section === 'store' ? shopId : '';
     const isShopId = value => window.StoreInviteRoute?.isShopId?.(value) ?? (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
     // UI hint only. Every merchant API rechecks the stored role and owner.
-    const canManage=()=>!standalone&&['admin','store','總管','店長','redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase());
+    const canManage=()=>!standalone&&window.currentUser?.retailSellerEligible===true&&!!window.currentUserProfile?.userId&&window.currentUser.userId===window.currentUserProfile.userId&&['admin','store','總管','店長','redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長','redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase());
     const canAdmin=()=>!standalone&&['admin','總管'].includes(String(window.userRole||'').toLowerCase());
     const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','reward','redeem','扣點用戶','總管','店長','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
@@ -326,6 +326,7 @@
       content.innerHTML=listedModule.renderExploreView({shops,photo,q:listQuery,category:listCategory,next:listedNext,walletLabel:walletLabel??content.querySelector('[data-explore-balance]')?.textContent??(standalone?'登入查看':'讀取中…'),filter:exploreFilter,sort:exploreSort,favoriteIds:favorites});
       content.querySelector('.shop-explore-search')?.insertAdjacentHTML('beforeend','<button type="button" class="shop-explore-product-search" data-do="discover" aria-label="找商品">商品</button>');
       content.querySelector('.shop-explore-footnote')?.insertAdjacentHTML('beforebegin',`<nav class="shop-explore-entry-nav" aria-label="其他商城入口"><button type="button" data-do="reward-units">贈點單位 ›</button>${canManage()?'<button type="button" data-do="manage">上架公司／商品 ›</button>':''}</nav>`);
+      content.querySelector('.shop-explore-footnote')?.insertAdjacentHTML('beforeend','<br>商品上架僅開放扣點店家、雙向店家及總管；加入會員不會自動取得上架資格。');
     }
     async function list(after='',q='',category='',filter=exploreFilter) {
       pageKind('directory');
@@ -573,7 +574,7 @@
       }
     }
     async function manage() {
-      if(!canManage())throw new Error('商店設定僅開放折抵店家、雙向完整版與管理員；贈點單位請使用贈點工作台。');
+      if(!canManage())throw new Error('商品上架與商店設定僅開放扣點店家、雙向店家及總管；加入會員不會自動取得上架資格。贈點單位請使用贈點工作台。');
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();

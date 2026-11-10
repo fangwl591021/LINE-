@@ -18,6 +18,7 @@ import { personalShareLink } from './worker/island-entry.mjs';
 import { isCheckinMallEvent, supplementCheckinMallCards } from './worker/checkin-mall-card.mjs';
 import { projectCheckinMallMonitor } from './worker/checkin-mall-monitor.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
+import { RETAIL_ROLES } from './js/modules/store-cooperation-plans.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
 import { checkRedeemOnlyAction, validateRedeemOperator } from './worker/redeem-only-cashier.mjs';
 import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
@@ -9446,6 +9447,7 @@ const D1ReadModule = {
       health: this.text(row.health),
       career: this.text(row.career),
       role,
+      retailSellerEligible: RETAIL_ROLES.includes(String(row.role).toLowerCase()),
       roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : (role === 'reward' ? '贈點用戶' : (role === 'redeem' ? '扣點用戶' : '一般'))),
       storeid: this.text(row.store_id),
       storeId: this.text(row.store_id),
@@ -10740,7 +10742,6 @@ const D1WriteModule = {
       && hasReferrerInput
       && user.referrer_id
       && user.referrer_id !== user.line_id;
-    const hasRoleInput = ['role', '權限級別'].some(key => data && data[key] !== undefined && data[key] !== null && String(data[key]).trim() !== '');
     if (existing) {
       ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
         if (user[key] === '' || user[key] === undefined || user[key] === null || user[key] === '未命名') user[key] = existing[key] || '';
@@ -10768,15 +10769,11 @@ const D1WriteModule = {
         user.network_id = existing.network_id || user.network_id;
       }
       if (user.referrer_id && user.referrer_id === user.line_id) user.referrer_id = existing.referrer_id || '';
-      if (existing.role === 'store' && user.role === 'user') user.role = existing.role;
-      if (!hasRoleInput) user.role = existing.role || user.role;
     }
-    // Only the admin role editor grants/revokes reward permission. Profile saves cannot
-    // grant it, remove it, or upgrade a reward-only account to a store account.
-    if (isRewardOnlyRole(this.role(existing && existing.role)) || isRewardOnlyRole(user.role) || this.role(existing && existing.role) === 'redeem' || user.role === 'redeem') {
-      user.role = existing ? this.role(existing.role) : 'user';
-    }
-    user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
+    // Profile, follow, claim and share saves never grant or normalize stored roles.
+    // New rows are members; conflict updates preserve the role at write time, so
+    // a stale profile cannot undo an administrator's concurrent plan change.
+    user.role = 'user';
     const writeExpiry = options.crmExpiry !== undefined;
     const profileWrite = env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id${writeExpiry ? ",crm_annual_fee_expire_at" : ""})
@@ -10785,13 +10782,7 @@ const D1WriteModule = {
         ${writeExpiry ? "crm_annual_fee_expire_at=excluded.crm_annual_fee_expire_at," : ""}
         name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
         region=excluded.region,address=excluded.address,socials=excluded.socials,
-        role=CASE
-          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
-          WHEN users.role = 'reward' THEN 'reward'
-          WHEN users.role = 'redeem' THEN 'redeem'
-          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
-          ELSE excluded.role
-        END,
+        role=users.role,
         store_id=excluded.store_id,
         referrer_id=CASE WHEN ${options.rewardActor ? '1' : '0'} AND COALESCE(users.referrer_id,'')<>'' THEN users.referrer_id ELSE excluded.referrer_id END,
         network_id=CASE WHEN ${options.rewardActor ? '1' : '0'} AND COALESCE(users.referrer_id,'')<>'' THEN users.network_id ELSE excluded.network_id END,
@@ -10812,6 +10803,7 @@ const D1WriteModule = {
       return null;
     });
     const savedRow = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]);
+    if (!savedRow) throw new Error('Profile result unavailable');
     const info = D1ReadModule.userRow({
       ...savedRow,
       row_id: user.row_id,
@@ -10820,7 +10812,7 @@ const D1WriteModule = {
       industry: user.industry,
       phone: user.phone,
       birthday: user.birthday,
-      role: user.role,
+      role: savedRow.role,
       store_id: user.store_id,
       referrer_id: user.referrer_id,
       network_id: user.network_id,
@@ -17109,6 +17101,17 @@ async function suggestCustomerImportMapping(payload, env) {
 
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
+  if (action === 'registerUser' || action === 'updateUserProfile') {
+    // Legacy clients send their displayed role automatically. It is profile data,
+    // never authority to choose a plan, including inside data/profile envelopes.
+    payload = { ...payload };
+    for (const key of ['data', 'profile']) {
+      if (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key])) payload[key] = { ...payload[key] };
+    }
+    for (const data of [payload, payload.data, payload.profile]) {
+      if (data && typeof data === 'object') { delete data.role; delete data['權限級別']; }
+    }
+  }
   const authz = await SecurityModule.authorizeAction(action, payload, request, env);
   if (!authz.allowed) {
     return { success: false, error: authz.error || 'Access Denied' };
@@ -17309,17 +17312,14 @@ async function dispatchAction(action, payload, request, env) {
     case 'updateUserProfile': {
       try {
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env, {rewardActor});
-        if (d1Result?.code === 'MEMBER_REFERRER_INVALID') return d1Result;
-        if (d1Result && d1Result.success !== false) return d1Result;
+        if (d1Result) return d1Result;
       } catch (e) {
         if (rewardActor) return {success:false,error:'會員資料與購物金紀錄未完成，請重新送出'};
-        console.error("D1 upsertUser fallback", e);
+        console.error("D1 profile save failed", e);
       }
-      if (isRewardOnlyRole(payload.authenticatedRole) || payload.authenticatedRole === 'redeem' ||
-          isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別']))) || D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別'])) === 'redeem') {
-        return { success: false, error: '會員資料暫時無法儲存，請稍後再試' };
-      }
-      return await AuthModule.updateAndClearCache(action, payload, env);
+      // D1 owns the raw plan. An unconfirmed write must not fall through to a
+      // legacy profile service with a different role/defaulting policy.
+      return { success: false, error: '會員資料暫時無法儲存，請稍後再試' };
     }
     case 'linkUserIdentity': {
       try {

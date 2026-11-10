@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import {isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken} from '../worker/reward-only-cashier.mjs';
 import {runCashierRequest, getCashierRequest} from '../worker/store-cashier-requests.mjs';
 import {checkRedeemOnlyAction,validateRedeemOperator} from '../worker/redeem-only-cashier.mjs';
+import {RETAIL_ROLES} from '../js/modules/store-cooperation-plans.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), D = 'U' + 'd'.repeat(32);
@@ -77,7 +78,7 @@ function setup(t, role = 'reward') {
   };
   const context = {console: {log() {}, warn() {}, error() {}}, crypto, TextEncoder, URL, Date,
     isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken,
-    checkRedeemOnlyAction,validateRedeemOperator,
+    checkRedeemOnlyAction,validateRedeemOperator,RETAIL_ROLES,
     runCashierRequest, getCashierRequest,
     fetch: async () => { throw Error('Unexpected external API'); }
   };
