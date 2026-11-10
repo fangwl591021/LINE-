@@ -29,7 +29,9 @@ function setup({standalone=true,section='',selected=shopId,products=true,status=
  if(item)window.readActmasterInitialParams=()=>new URLSearchParams('shopSection=store&shopId='+selected+'&shopItem='+item);
  window.__testLoadCommerce=async()=>({mountCommerce:async(host,options)=>commerce.push({host,options})});
  const fetch=async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>({success:true,shop,products:items.map(p=>({...p,shop})),product_next:'',product_count:items.length,product_limit:1})};};
- const document={getElementById:()=>null,createElement:node};
+ const elementsById=new Map(),head=node();
+ head.appendChild=child=>{head.appended.push(child);child.parentNode=head;if(child.id)elementsById.set(child.id,child);return child;};
+ const document={head,getElementById:id=>elementsById.get(id)||null,createElement:tag=>Object.assign(node(),{tagName:String(tag).toUpperCase()})};
  const context={window,document,location,fetch,URL,URLSearchParams,AbortSignal,crypto,navigator:{clipboard:{writeText:async value=>copies.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},console};
  vm.runInNewContext(routeSource,context);
  // Isolate only the lazy checkout module boundary; execute the actual storefront event routing.

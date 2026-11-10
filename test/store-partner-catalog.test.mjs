@@ -9,6 +9,7 @@ import {parseCard} from '../tools/collect-aiwe-partners.mjs';
 import {partnerHandle,prepareImport} from '../tools/prepare-aiwe-import.mjs';
 import {reviewedIndustries} from '../tools/aiwe-partner-industries.mjs';
 import {industryCorrection} from '../tools/prepare-aiwe-industry-correction.mjs';
+import {renderExploreView} from '../js/modules/store-explore-view.js';
 const read=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const id=handle=>handle.slice(8).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');
 function fixture(){
@@ -62,12 +63,19 @@ test('reviewed industry correction targets only 42 blank, unchanged source rows 
 test('directory UI carries one random visit seed through recommendation/search and uses industry labels',()=>{
  const source=read('js/modules/store-shop.js');
  assert.match(source,/const discoverySeed=Array.from\(crypto.getRandomValues/);
- assert.match(source,/void api\('\?discovery=newest'\)/);
- assert.match(source,/\?seed=\$\{discoverySeed\}&after=/);
- const code=source.slice(source.indexOf('  const categories'),source.indexOf('  function photo'));
- const html=vm.runInNewContext(code+';categoryTags("shops","食")');
- assert.match(html,/店家業種篩選/);assert.match(html,/餐飲食品/);assert.match(html,/data-category="食" aria-pressed="true"/);
- assert.equal((html.match(/data-do="category"/g)||[]).length,8);
+ const request=source.split('\n').find(line=>line.includes("else result=await api(exploreFilter==='newest'"));
+ assert.ok(request,'directory selects the real newest API only for the newest filter');
+ const expression=request.match(/api\((.*)\);\s*$/)?.[1];assert.ok(expression);
+ const context={discoverySeed:'0123456789abcdef',after:'next.cursor',q:'板橋',category:'食',encodeURIComponent};
+ const regular=new URL(vm.runInNewContext(expression,{...context,exploreFilter:'all'}),'https://test.invalid');
+ assert.equal(regular.searchParams.get('seed'),context.discoverySeed);assert.equal(regular.searchParams.get('after'),context.after);
+ assert.equal(regular.searchParams.get('q'),context.q);assert.equal(regular.searchParams.get('category'),context.category);
+ assert.equal(regular.searchParams.has('discovery'),false);
+ assert.equal(vm.runInNewContext(expression,{...context,exploreFilter:'newest'}),'?discovery=newest');
+ const html=renderExploreView({category:'食'});
+ assert.match(html,/店家分類/);assert.match(html,/美食餐飲/);assert.match(html,/data-category="食" aria-pressed="true"/);
+ for(const category of ['','食','宿','遊','購','行','服務','製造'])assert.ok(html.includes('data-category="'+category+'"'));
+ assert.equal((html.match(/data-do="search-category"/g)||[]).length,8);
 });
 
 test('partner industry select preserves custom values and does not accumulate legacy options',()=>{

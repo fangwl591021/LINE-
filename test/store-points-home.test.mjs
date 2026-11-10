@@ -4,9 +4,10 @@ import {readFileSync} from 'node:fs';
 import {inflateSync} from 'node:zlib';
 import vm from 'node:vm';
 import {merchantRole,renderPointsHome,renderRecommendedShops} from '../js/modules/store-points-home.js';
+import {renderExploreView} from '../js/modules/store-explore-view.js';
 const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
-test('wallet replaces refresh link with game while retaining personal QR for every role',()=>{
- for(const options of [{},{merchant:true},{merchant:true,rewardOnly:true},{merchant:true,redeemOnly:true}]){
+test('consumer presentation retains game and personal QR',()=>{
+ for(const options of [{}]){
   const html=renderPointsHome(options);assert.match(html,/data-do="tank-game"[^>]*>玩遊戲拿點數/);
   assert.match(html,/data-do="wallet"/);assert.match(html,/我的專屬 QR/);assert.doesNotMatch(html,/查看\s*／\s*更新點數/);
  }
@@ -121,7 +122,7 @@ test('store/admin cover reuses existing functions and never fabricates budget, r
  const html=renderPointsHome({merchant:true,canManage:true});
  for(const action of ['point-reward','point-redeem','sales','online-manage','manage'])assert.ok(html.includes(`data-do="${action}"`));
  assert.doesNotMatch(html,/13,260|50,000|回購率|新增會員|本月贈點|1 點.*1 元/);
- assert.match(html,/我的共用點數/);assert.match(html,/商品 QR 折抵/);
+ assert.match(html,/merchant-workbench/);assert.match(html,/本月商品折抵/);
 });
 
 test('administrator quota presentation stays separate from the paid twenty-product plan',()=>{
@@ -140,23 +141,27 @@ test('recommended entry is a mall only when its own published-product flag is on
   assert.match(html,/data-do="view" data-id="same-shop"/);
  }
 });
-test('directory and search use the same flag, keep each view id, and request only one catalog page',async()=>{
- const start=mall.indexOf('async function list('),end=mall.indexOf('function filterProducts(',start);
+test('reference directory keeps each real view id and requests one public catalog page',async()=>{
+ const start=mall.indexOf('function paintExplore('),end=mall.indexOf('function filterProducts(',start);
  assert.ok(start>=0&&end>start);
  const shops=[{id:'store-only',name:'店家',has_active_products:0},{id:'store-mall',name:'商城',has_active_products:1},{id:'legacy',name:'舊回應'}];
- const calls=[],content={innerHTML:'',querySelector:()=>({classList:{add(){}},insertAdjacentHTML(){}}),querySelectorAll:()=>[],insertAdjacentHTML(){}};
+ const calls=[],content={isConnected:true,innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[],insertAdjacentHTML(){}};
  const notice={hidden:false};
- const context={epoch:0,alert:{},content,root:{querySelector:()=>notice},discoverySeed:'0123456789abcdef',listCategory:'',listQuery:'',encodeURIComponent,pageKind(){},canManage:()=>false,esc:String,photo:()=>'',categoryTags:()=>'',api:async url=>{calls.push(url);return {shops,next:''};}};
+ const root={isConnected:true,dataset:{},contains:()=>true,querySelector:selector=>selector==='.shop-notice'?notice:{hidden:false,dataset:{},setAttribute(){}}};
+ const context={epoch:0,alert:{},content,root,window:{currentPage:'store-shop'},standalone:true,exploreFilter:'all',exploreSort:'recommended',listedShops:[],listedNext:'',listedModule:null,readFavorites:()=>[],loadExploreView:async()=>({renderExploreView}),setReferenceNavigation(){},discoverySeed:'0123456789abcdef',listCategory:'',listQuery:'',encodeURIComponent,pageKind(){},canMerchantHome:()=>false,canManage:()=>false,esc:String,photo:()=>'',categoryTags:()=>'',api:async url=>{calls.push(url);return {shops,next:''};}};
  await vm.runInNewContext(mall.slice(start,end)+';list("","咖啡","食");',context);
  assert.equal(calls.length,1);assert.match(calls[0],/seed=0123456789abcdef/);
- assert.equal(notice.hidden,true,'Read-only directory does not show the cashier instruction');
- assert.match(content.innerHTML,/data-id="store-only">前往店家<\/button>/);
- assert.match(content.innerHTML,/data-id="store-mall">進入商城<\/button>/);
- assert.match(content.innerHTML,/data-id="legacy">前往店家<\/button>/);
+ assert.equal(notice.hidden,true);
+ for(const id of ['store-only','store-mall','legacy'])assert.ok(content.innerHTML.includes('data-do="view" data-id="'+id+'"'));
+ assert.equal((content.innerHTML.match(/class="shop-explore-view-link"/g)||[]).length,3);
 });
-test('point home starts narrow wallet and public shop reads independently; history remains on demand',()=>{
- const source=mall.slice(mall.indexOf('async function pointsHome('),mall.indexOf('function memberHome()'));
- assert.match(source,/void loadWalletModule/);assert.match(source,/void api\('\?discovery=newest'\)/);
- assert.doesNotMatch(source,/queryUserPoints|loadStorePointCashierLogs|\/manage|Promise\.all/);
- assert.match(source,/owner===window.currentUserProfile\?\.userId&&role===window.userRole/);
+
+test('directory starts narrow wallet independently and merchant reads only own store summaries',()=>{
+ const directory=mall.slice(mall.indexOf('async function list('),mall.indexOf('function discoveryTabs('));
+ assert.match(directory,/void loadWalletModule/);assert.match(directory,/wallet\.readStoreWalletSummary\(\)/);
+ assert.ok(directory.indexOf('void loadWalletModule')<directory.indexOf('await loadExploreView'));
+ assert.doesNotMatch(directory,/queryUserPoints|loadStorePointCashierLogs|api\('\/manage/);
+ assert.match(directory,/owner===window.currentUserProfile\?\.userId&&role===window.userRole/);
+ const home=mall.slice(mall.indexOf('async function pointsHome('),mall.indexOf('async function rewardUnits('));
+ assert.match(home,/if\(!canManage\(\)\)return/);assert.match(home,/api\('\/manage',null,true\)/);assert.match(home,/api\('\/sales\?/);
 });
