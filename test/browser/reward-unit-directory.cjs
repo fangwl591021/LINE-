@@ -5,14 +5,14 @@ const {chromium}=require('playwright');
   const {rewardFixture,REWARD}=await import('../fixtures/reward-unit-directory.mjs');
   const f=rewardFixture(),requests=[];let origin,failList=false,emptyList=false;
   for(let n=1;n<=4;n++){const uid='U'+String(n).padStart(32,'0');f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'reward')").run(uid,uid);f.sql.prepare("INSERT INTO reward_unit_publications(id,target_uid,name,description,reward_terms,status,version,updated_at) VALUES(?,?,?,?,?,'active',1,'now')").run('00000000-0000-4000-8000-'+String(n).padStart(12,'0'),uid,'合成合作單位'+n,'這是合成公司介紹，不是真實商家。','參加合成活動，核對資格後才贈點。');}
-  const allowed=new Set(['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/reward-units.js','js/modules/reward-unit-editor.js','css/store-shop.css','css/reward-unit-editor.css','assets/points-logo-transparent-20260916.png']);
+  const allowed=new Set(['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/store-cooperation-plans.mjs','js/modules/reward-units.js','js/modules/reward-unit-editor.js','css/store-shop.css','css/reward-unit-editor.css','assets/points-logo-transparent-20260916.png']);
   const server=createServer(async(req,res)=>{try{
     const url=new URL(req.url,origin),file=url.pathname.slice(1);requests.push({method:req.method,path:url.pathname,auth:!!req.headers.authorization});
     if(url.pathname==='/'){
       const editor=url.searchParams.has('editor');res.setHeader('Content-Type','text/html;charset=utf-8');
       res.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>贈點單位・隔離驗收</title><link rel="stylesheet" href="/css/store-shop.css"><link rel="stylesheet" href="/css/reward-unit-editor.css"><body style="margin:0">'+(editor?'<button id="open" onclick="openRewardUnitEditor(\''+REWARD+'\')">CRM 贈點單位上架</button>':'<main id="public-store-shop" data-worker="'+origin+'"></main>')+'<script>window.Config={WORKER_URL:location.origin};window.userRole="admin";window.currentPage="store-shop";window.liff={isLoggedIn:()=>true,getAccessToken:()=>"admin"};window.goPage=p=>window.currentPage=p;window.showToast=()=>{};</script><script src="/js/modules/'+(editor?'reward-unit-editor.js':'store-shop.js')+'"></script></body></html>');return;
     }
-    if(allowed.has(file)){res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'image/png');res.end(fs.readFileSync(file));return;}
+    if(allowed.has(file)){res.setHeader('Content-Type',(file.endsWith('.js')||file.endsWith('.mjs'))?'text/javascript':file.endsWith('.css')?'text/css':'image/png');res.end(fs.readFileSync(file));return;}
     if(url.pathname.startsWith('/v1/reward-units')){
       if(emptyList&&url.pathname==='/v1/reward-units'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,units:[],next:''}));return;}
       if(failList&&url.pathname==='/v1/reward-units'){res.writeHead(503,{'Content-Type':'application/json'});res.end(JSON.stringify({success:false,error:'合成斷線測試'}));return;}
