@@ -18,7 +18,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
   const doc=container.ownerDocument;
   if(!doc.getElementById('store-admin-catalog-css')){
     const link=doc.createElement('link');link.id='store-admin-catalog-css';link.rel='stylesheet';
-    link.href=new URL('../../css/store-admin-catalog.css?v=2',import.meta.url).href;doc.head.append(link);
+    link.href=new URL('../../css/store-admin-catalog.css?v=3',import.meta.url).href;doc.head.append(link);
   }
   const make=(tag,text)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
   const panel=make('section');panel.className='mall-catalog';container.replaceChildren(panel);
@@ -67,7 +67,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       input.value=record[key]??'';wrapper.append(input);form.append(wrapper);fields[key]=input;return input;
     };
     label(type==='store'?'name':'title',type==='store'?'店家名稱':'商品／優惠名稱','input',{required:true,maxLength:type==='store'?80:100});
-    label('description','介紹','textarea',{maxLength:type==='store'?2000:3000,rows:4});
+    label('description','介紹','textarea',{maxLength:type==='store'?2000:3000,rows:type==='store'?4:10});
     const category=label('category','業種分類','select');
     for(const value of [...new Set(['','食','宿','遊','購','行','服務','製造',record.category||''])]){
       const option=make('option',value||'未分類');option.value=value;category.append(option);
@@ -77,11 +77,11 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
     const validImage=value=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password?url.href:'';}catch{return '';}};
     const showPreview=()=>{const url=validImage(imageUrl.value.trim());preview.hidden=!url;if(url)preview.src=url;else preview.removeAttribute('src');};
     preview.onerror=()=>{preview.hidden=true;};imageUrl.addEventListener('input',showPreview);showPreview();
-    let imageFile=null;
+    let imageFile=null,imageUploadHint=null;
     if(prepareImage&&uploadImage){
       const wrapper=make('label','直接上傳圖片（建議 800 × 533，JPG／PNG／WebP，10MB 以下）');
       imageFile=make('input');imageFile.type='file';imageFile.name='image_file';imageFile.accept='image/jpeg,image/png,image/webp';wrapper.append(imageFile);form.append(wrapper);
-      form.append(make('p','上傳後請按「確認儲存」才會更新商城；取消不會替換原有圖片。'));
+      imageUploadHint=make('p','上傳後請按「確認儲存」才會更新商城；取消不會替換原有圖片。');form.append(imageUploadHint);
       imageFile.onchange=async()=>{
         const file=imageFile.files?.[0];if(!file||!active()||busy||pending||finished)return;
         const requestEpoch=epoch,stillHere=()=>active()&&requestEpoch===epoch&&body.contains(form);
@@ -95,6 +95,13 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         }catch(error){if(stillHere())setMessage((error.message||'圖片上傳失敗')+'，原圖片未變更。',true);}
         finally{busy=false;if(stillHere()){imageFile.value='';lock();}}
       };
+    }
+    if(type==='product'){
+      const overview=make('div'),media=make('div'),description=fields.description.closest('label'),categoryLabel=category.closest('label');
+      overview.className='mall-catalog-product-overview';media.className='mall-catalog-product-media';description.className='mall-catalog-product-description';
+      fields.title.closest('label').after(categoryLabel);categoryLabel.after(overview);
+      overview.append(description,media);media.append(imageUrl.closest('label'),preview);
+      if(imageFile)media.append(imageFile.closest('label'),imageUploadHint);
     }
     if(type==='store'){
       label('address','地址','input',{maxLength:200});label('phone','電話','input',{maxLength:40});label('hours','營業時間','input',{maxLength:200});
@@ -238,7 +245,7 @@ export async function mountAdminDrafts(container,{api,isCurrent,onBack,onManageC
   if(!isCurrent())return;
   const doc=container.ownerDocument,make=(tag,text)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
   if(!doc.getElementById('store-admin-catalog-css')){
-    const link=make('link');link.id='store-admin-catalog-css';link.rel='stylesheet';link.href=new URL('../../css/store-admin-catalog.css?v=2',import.meta.url).href;doc.head.append(link);
+    const link=make('link');link.id='store-admin-catalog-css';link.rel='stylesheet';link.href=new URL('../../css/store-admin-catalog.css?v=3',import.meta.url).href;doc.head.append(link);
   }
   const panel=make('section');panel.className='mall-catalog';container.replaceChildren(panel);
   const active=()=>isCurrent()&&container.contains(panel),bar=make('nav'),back=make('button','← 返回店家列表'),refresh=make('button','重新載入');
