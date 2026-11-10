@@ -29,7 +29,7 @@ test('visible discovery navigation offers settings only with the existing manage
  assert.match(find,/await list\(\)/);assert.match(find,/shop-discovery-tabs/);assert.doesNotMatch(find,/\.focus\(/);
 });
 test('legacy plain list and internal partner entry resolve only to the store directory',()=>{
- assert.match(source,/else if\(!standalone&&\['partners','list'\]\.includes\(section\)\)await list\(\)/);
+ assert.match(source,/else if\(!standalone&&\['partners','list'\]\.includes\(section\)\)await list\('',\s*'',\s*categories\.includes\(initialCategory\)/);
  assert.match(source,/!\['cashier','partners','list'\]\.includes\(section\)/);
  assert.match(source,/section==='discovery'\)await discover\(\)/);assert.match(source,/section==='point-history'/);
  assert.match(source,/case 'manage': await manage\(\); break;/);assert.match(source,/api\('\/manage',null,true\)/);

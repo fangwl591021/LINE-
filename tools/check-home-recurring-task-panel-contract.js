@@ -12,9 +12,13 @@ function fail(message) {
 }
 
 const panelIndex = html.indexOf('id="home-recurring-task-panel"');
-const aiIndex = html.indexOf('<section class="home-lower-panel mx-0 mt-5');
-if (panelIndex < 0 || aiIndex < 0 || panelIndex > aiIndex) {
-  fail('recurring task panel must appear before AI services');
+const aiIndex = html.indexOf('id="home-ai-services"');
+if (panelIndex < 0 || aiIndex < 0) {
+  fail('recurring tasks and AI services must remain available');
+}
+const layout = fs.readFileSync(path.join(root, 'css', 'home-discovery-20261110.css'), 'utf8');
+if (!layout.includes('#home-ai-services {order:6}') || !layout.includes('#page-home>* {order:50}')) {
+  fail('home displays AI services first and retains the recurring task panel below');
 }
 
 for (const id of [

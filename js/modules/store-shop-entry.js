@@ -10,7 +10,7 @@
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=76&org=1&publish=2&game=2&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=2&newestShops=1&productDefault=1';
+      script.src = 'js/modules/store-shop.js?v=76&org=1&publish=2&game=2&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=2&newestShops=1&productDefault=1&homeLayout=1';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;
@@ -97,7 +97,7 @@
         if (entry?.kind === 'product') {
           if (window.StoreShop.supportsPublicProductTarget !== true) throw new Error('商城正在更新，請重新開啟原商品卡片。');
           window.StoreShop.mount(root, false, '', '', '', 'store', entry.shopId, entry.productId);
-        } else window.StoreShop.mount(root, false, productId, qrToken, memberProduct, entry === 'mall' ? 'discovery' : entry === 'details' ? 'point-history' : section, shopId,'',options.applicationReview||null);
+        } else window.StoreShop.mount(root, false, productId, qrToken, memberProduct, entry === 'mall' ? 'discovery' : entry === 'details' ? 'point-history' : section, shopId,'',options.applicationReview||null,options.initialCategory||'');
         addReturn();
       }
     } catch(error) {

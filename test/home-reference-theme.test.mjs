@@ -106,9 +106,9 @@ test('theme assets are local files and the existing mall banner remains a genuin
   assert.match(svg, /<svg\b/);
   assert.doesNotMatch(svg, /<script\b|<foreignObject\b|(?:href|src)="https?:/i);
   const banner = html.match(/<button\b[^>]*id="home-mall-banner"[\s\S]*?<\/button>/)?.[0] || '';
-  assert.match(banner, /onclick="window\.openStoreShop\(\)"/);
-  assert.match(banner, /assets\/points-mall-banner-20260916\.png/);
-  assert.match(banner, /width="2170" height="725"/);
+  assert.match(banner, /onclick="window\.openHomeShopCategory\(''\)"/);
+  assert.match(banner, /assets\/home-discover-shops-20261110\.webp/);
+  assert.match(banner, /width="1200" height="400"/);
 });
 
 test('network search remains the existing three-scope form with accessible focus', () => {

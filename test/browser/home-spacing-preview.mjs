@@ -26,11 +26,11 @@ createServer(async (req, res) => {
       res.writeHead(200, {'Content-Type':'text/html; charset=utf-8', 'Cache-Control':'no-store', 'Content-Security-Policy':policy});
       return res.end(html);
     }
-    if (!/^\/(?:css\/[\w-]+\.css|assets\/[\w.-]+\.(?:png|svg))$/.test(url.pathname)) {
+    if (!/^\/(?:css\/[\w-]+\.css|assets\/[\w.-]+\.(?:png|svg|webp))$/.test(url.pathname)) {
       res.writeHead(404); return res.end();
     }
     const content = await readFile(new URL(url.pathname.slice(1), root));
-    const type = url.pathname.endsWith('.css') ? 'text/css' : url.pathname.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+    const type = url.pathname.endsWith('.css') ? 'text/css' : url.pathname.endsWith('.svg') ? 'image/svg+xml' : url.pathname.endsWith('.webp') ? 'image/webp' : 'image/png';
     res.writeHead(200, {'Content-Type':type, 'Cache-Control':'no-store'}); res.end(content);
   } catch { res.writeHead(404); res.end(); }
 }).listen(8776, '127.0.0.1', () => console.log('Static homepage preview: http://127.0.0.1:8776/'));
