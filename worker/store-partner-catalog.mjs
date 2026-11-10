@@ -12,6 +12,13 @@ async function read(db,sql,args=[]){
   if(result.success===false||!Array.isArray(result.results))throw Error('Partner catalog unavailable');
   return result.results;
 }
+export async function newestPartnerShops(db){
+  try {
+    return await read(db,`SELECT c.*,COALESCE(julianday(o.published_at),0) AS discovery_published_at FROM (${catalog}) c
+      LEFT JOIN store_publication_order o ON o.source='partner' AND o.entity_id='partner_'||replace(c.id,'-','')
+      WHERE c.status='active' AND ${complete} ORDER BY discovery_published_at DESC,c.id DESC LIMIT 3`);
+  } catch(error){if(missing(error))return [];throw error;}
+}
 export async function publicPartnerShops(db,{id='',q='',after='',category='',order=catalogOrder('',after)}={}){
   try{
     return await read(db,`SELECT *${order.select('id')} FROM (${catalog}) WHERE status='active' AND ${complete} AND (?='' OR id=?) AND ${order.where('id')} AND (instr(name,?)>0 OR instr(category,?)>0 OR instr(address,?)>0) AND (?='' OR category=?) ORDER BY ${order.by('id')} LIMIT 41`,[id,id,...order.args,q,q,q,category,category]);

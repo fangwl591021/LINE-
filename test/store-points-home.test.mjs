@@ -156,7 +156,7 @@ test('directory and search use the same flag, keep each view id, and request onl
 });
 test('point home starts narrow wallet and public shop reads independently; history remains on demand',()=>{
  const source=mall.slice(mall.indexOf('async function pointsHome('),mall.indexOf('function memberHome()'));
- assert.match(source,/void loadWalletModule/);assert.match(source,/void api\('\?seed='\+discoverySeed\)/);
+ assert.match(source,/void loadWalletModule/);assert.match(source,/void api\('\?discovery=newest'\)/);
  assert.doesNotMatch(source,/queryUserPoints|loadStorePointCashierLogs|\/manage|Promise\.all/);
  assert.match(source,/owner===window.currentUserProfile\?\.userId&&role===window.userRole/);
 });

@@ -165,7 +165,7 @@
       if(!standalone)void loadWalletModule().then(module=>{if(current())clearHomeWallet=module.mountStoreWalletCard(content,{isCurrent:current,onInvalid:()=>{
         if(version===epoch&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'){merchantView=undefined;void run(()=>pointsHome());}
       }});}).catch(()=>{if(current())content.querySelector('[data-home-balance]').textContent='點按 QR 重試';});
-      void api('?seed='+discoverySeed).then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
+      void api('?discovery=newest').then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
       void home.readRewardUnits(base).then(result=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML=home.renderRewardCards(result.units,{home:true});}).catch(()=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML='<p>贈點單位暫時無法載入。<button type="button" data-do="reward-units">重新載入</button></p>';});
     }
     async function rewardUnits(id='') {
