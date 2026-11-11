@@ -3,6 +3,7 @@ import {BuyerProfileError,readBuyerProfile,saveBuyerProfile} from './store-buyer
 import {CommercePointError,commercePointsEnabled,requireCommercePointService,commerceWallet,pointLockStatements,pointLockError,executePointOperation,reconcilePointOrder} from './store-commerce-points.mjs';
 import {storePlanForRole,retailRoleSql,pickupRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 const root='/v1/store-commerce';
+const SHIPPING_RULE_VERSION=2;
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 class CommerceError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new CommerceError(message,status);};
@@ -15,6 +16,9 @@ function str(data,key,max,required=true) {
 }
 function integer(value,max,label,min=0) {if(!Number.isSafeInteger(value)||value<min||value>max)fail(`${label} 必須為 ${min} 至 ${max} 的整數`);return value;}
 function uuid(value) {if(typeof value!=='string'||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value))fail('請重新開啟表單取得交易編號');return value;}
+function requireShippingRuleVersion(data) {
+  if(data?.shipping_rule_version!==SHIPPING_RULE_VERSION)fail('結帳頁面已更新，請先至我的網路訂單查核，再重新整理後核對商品與運費',426);
+}
 async function hash(value) {const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)));return [...new Uint8Array(bytes)].map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function json(request) {
   const reader=request.body?.getReader();if(!reader)fail('缺少資料');const chunks=[];let size=0;
@@ -75,17 +79,20 @@ async function quote(db,user,input,env,pointService) {
   if(products.length!==input.items.length)fail('商品限店內、已下架或不屬於此店，請重新選購',409);
   const items=input.items.map(item=>{const product=products.find(p=>p.id===item.id),unit=Math.floor(product.price_cents/100);
     const max=product.redeem_type==='full'?unit:product.redeem_type==='fixed'?Math.min(unit,product.redeem_value):product.redeem_type==='percent'?Math.min(unit,Math.floor(product.price_cents*product.redeem_value/10000)):0;
-    return {...product,shipping_fee_cents:pickup?0:product.shipping_fee_cents,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity,line_shipping_fee_cents:pickup?0:product.shipping_fee_cents==null?null:integer(product.shipping_fee_cents,1000000,'商品運費')*item.quantity};});
+    const {shipping_fee_cents,...details}=product;
+    return {...details,configured_shipping_fee_cents:shipping_fee_cents==null?null:integer(shipping_fee_cents,1000000,'商品運費'),quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity};});
   const subtotal=items.reduce((sum,i)=>sum+i.line_total_cents,0);
-  const legacyFee=!pickup&&items.some(i=>i.shipping_fee_cents==null)?(config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents):0;
-  const fee=legacyFee+items.reduce((sum,i)=>sum+(i.line_shipping_fee_cents??0),0);
+  const legacyFee=!pickup&&items.some(i=>i.configured_shipping_fee_cents==null)?(config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:integer(config.shipping_fee_cents,1000000,'店家運費')):0;
+  const fees=pickup?[0]:items.map(i=>i.configured_shipping_fee_cents??legacyFee);
+  if(new Set(fees).size>1)fail('選購商品運費設定不一致，請聯絡店家確認後再結帳',409);
+  const fee=fees[0];
   integer(subtotal+fee,100000000,'訂單金額',1);
   const maxPoints=items.reduce((sum,i)=>sum+i.max_points,0);
   if(input.points_used>maxPoints)fail('折抵點數超過商品上限，運費不可折抵');
   const wallet=input.points_used?await commerceWallet(pointService,user.line_id,env):null;
   if(wallet&&input.points_used>wallet.balance)fail('購物金不足，請減少折抵點數');
   const customer=pickup?{...input.customer,store_info:[shop.name,shop.address,shop.phone].join('｜'),pickup_shop_name:shop.name,pickup_address:shop.address,pickup_phone:shop.phone}:input.customer;
-  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,legacy_shipping_fee_cents:legacyFee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
+  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,shipping_rule_version:SHIPPING_RULE_VERSION,buyer_name:input.buyer.name,buyer:input.buyer,items,customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
   return {snapshot,wallet,merchant_uid:shop.owner_uid,quote_hash:await hash({buyer:user.line_id,pointIdentity:wallet?.identity||'',snapshot})};
 }
 function publicOrder(row) {const {buyer_uid,request_hash,request_key,...order}=row;const snapshot=JSON.parse(order.snapshot_json);delete order.snapshot_json;return {...order,snapshot};}
@@ -97,6 +104,7 @@ async function createOrder(db,user,data,now,env,pointService) {
   const input=checkoutInput(data),key=uuid(data.request_key),requestHash=await hash(input);
   const previous=await q(db,'SELECT * FROM store_commerce_orders WHERE buyer_uid=? AND request_key=?',user.line_id,key).first();
   if(previous){if(previous.request_hash!==requestHash)fail('相同下單編號不可修改內容',409);return publicOrder(previous);}
+  requireShippingRuleVersion(data);
   const priced=await quote(db,user,input,env,pointService);if(data.quote_hash!==priced.quote_hash)fail('價格、折抵、運費或收款資料已變更，請重新確認訂單',409);
   const s=priced.snapshot,id=crypto.randomUUID();
   // One conditional insert closes the race with product/settings updates.
@@ -220,7 +228,7 @@ export async function handleStoreCommerce(request,env,fetcher=fetch,pointService
     if(!enabled)fail('線上交易尚未開放；不會建立訂單或扣點',503);
     if(request.method!=='POST')fail('不支援的操作',404);
     const data=await json(request),now=new Date().toISOString();
-    if(path==='/quote'){const result=await quote(db,user,checkoutInput(data),env,pointService);return reply({success:true,snapshot:result.snapshot,quote_hash:result.quote_hash});}
+    if(path==='/quote'){requireShippingRuleVersion(data);const result=await quote(db,user,checkoutInput(data),env,pointService);return reply({success:true,snapshot:result.snapshot,quote_hash:result.quote_hash});}
     if(path==='/orders')return reply({success:true,order:await createOrder(db,user,data,now,env,pointService)});
     if(path==='/orders/action')return reply({success:true,order:await transition(db,user,data,now,env,pointService)});
     fail('不支援的操作',404);

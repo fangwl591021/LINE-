@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {createListingFixture,OWNER,ADMIN,SHOP,PRODUCT} from './fixtures/store-listing-catalog.mjs';
 import {normalizeProduct} from '../worker/store-shop.mjs';
 import {handleStoreCommerce} from '../worker/store-commerce.mjs';
@@ -11,7 +12,7 @@ function fixture(t){
  for(const file of ['0034_store_commerce.sql','0037_store_buyer_profiles.sql','0038_store_buyer_delivery.sql','0062_store_commerce_points.sql'])f.sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  f.sql.exec("UPDATE store_shop_products SET purchase_mode='online';");
  f.sql.prepare("INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES(?,1,'合成銀行','004','123456','合成戶名',6000,0,'now')").run(SHOP);
- const cart=extra=>({shop_id:SHOP,items:[{id:PRODUCT,quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'合成買家',phone:'0912345678',email:''},customer:{name:'合成收件人',phone:'0912345678',carrier:'POST',postal_code:'',city:'台北市',district:'中正區',address:'合成路1號',store_info:'',note:''},...extra});
+ const cart=extra=>({shipping_rule_version:2,shop_id:SHOP,items:[{id:PRODUCT,quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'合成買家',phone:'0912345678',email:''},customer:{name:'合成收件人',phone:'0912345678',carrier:'POST',postal_code:'',city:'台北市',district:'中正區',address:'合成路1號',store_info:'',note:''},...extra});
  const call=async(path,data)=>{
   const r=await handleStoreCommerce(new Request('https://example.test/v1/store-commerce'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+OWNER},...(data?{body:JSON.stringify(data)}:{})}),{...f.env,STORE_COMMERCE_ENABLED:'true'},f.fetcher);
   return {http:r.status,...await r.json()};
@@ -30,21 +31,64 @@ test('additive shipping migration preserves every old column and enforces nullab
   for(const value of [0,1,1000000,null])sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=?').run(value);
  }finally{sql.close();}
 });
-test('each product charges unit shipping times quantity, zero is free and legacy shop fee is not added',async t=>{
- const f=fixture(t);f.sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=12000 WHERE id=?').run(PRODUCT);f.add('second',3500);f.add('free',0);
- const data=f.cart({items:[{id:PRODUCT,quantity:2},{id:'second',quantity:3},{id:'free',quantity:9}],shipping_fee_cents:1,total_cents:1});
- const q=await f.call('/quote',data);assert.equal(q.http,200,q.error);assert.equal(q.snapshot.shipping_fee_cents,34500);assert.equal(q.snapshot.legacy_shipping_fee_cents,0);
- assert.equal(q.snapshot.items.find(i=>i.id===PRODUCT).line_shipping_fee_cents,24000);assert.equal(q.snapshot.items.find(i=>i.id==='free').line_shipping_fee_cents,0);
+test('same-shop products charge one fee once regardless of products or quantities',async t=>{
+ const f=fixture(t);f.sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=5000 WHERE id=?').run(PRODUCT);f.add('second',5000);
+ const data=f.cart({items:[{id:PRODUCT,quantity:2},{id:'second',quantity:3}],shipping_fee_cents:1,total_cents:1});
+ const q=await f.call('/quote',data);assert.equal(q.http,200,q.error);assert.equal(q.snapshot.shipping_fee_cents,5000);assert.equal(q.snapshot.shipping_rule_version,2);
+ assert.deepEqual(q.snapshot.items.map(i=>i.configured_shipping_fee_cents),[5000,5000]);
+ for(const item of q.snapshot.items){assert.equal('shipping_fee_cents' in item,false);assert.equal('line_shipping_fee_cents' in item,false);}
  f.sql.exec('UPDATE store_commerce_settings SET free_shipping_cents=1');
- assert.equal((await f.call('/quote',data)).snapshot.shipping_fee_cents,34500,'old store threshold must not erase explicit fees');
+ assert.equal((await f.call('/quote',data)).snapshot.shipping_fee_cents,5000,'legacy threshold must not erase explicit fees');
  assert.equal(f.count('store_commerce_orders'),0);assert.equal(f.count('store_commerce_point_operations'),0);
 });
-test('legacy NULL still charges once per cart and mixed carts add explicit fees without double charging',async t=>{
- const f=fixture(t);f.add('second',null);f.add('explicit',5000);
- const data=f.cart({items:[{id:PRODUCT,quantity:2},{id:'second',quantity:3},{id:'explicit',quantity:2}]});
- const q=await f.call('/quote',data);assert.equal(q.http,200);assert.equal(q.snapshot.shipping_fee_cents,16000);assert.equal(q.snapshot.legacy_shipping_fee_cents,6000);
+test('mixed legacy and explicit fees must agree after the legacy threshold; no charges are added together',async t=>{
+ const f=fixture(t);f.add('legacy',null);f.add('explicit',6000);
+ const data=f.cart({items:[{id:PRODUCT,quantity:2},{id:'legacy',quantity:3},{id:'explicit',quantity:2}]});
+ const q=await f.call('/quote',data);assert.equal(q.http,200,q.error);assert.equal(q.snapshot.shipping_fee_cents,6000);
  f.sql.exec('UPDATE store_commerce_settings SET free_shipping_cents=1');
- const free=await f.call('/quote',data);assert.equal(free.snapshot.shipping_fee_cents,10000);assert.equal(free.snapshot.legacy_shipping_fee_cents,0);
+ const mismatch=await f.call('/quote',data);assert.equal(mismatch.http,409);assert.match(mismatch.error,/運費設定不一致/);
+ assert.equal(f.count('store_commerce_orders'),0);
+});
+test('zero is free, NULL uses the legacy fee and legacy free threshold does not apply to explicit fees',async t=>{
+ const f=fixture(t);f.add('legacy',null);f.add('free',0);
+ const twoLegacy=f.cart({items:[{id:PRODUCT,quantity:4},{id:'legacy',quantity:2}]});
+ assert.equal((await f.call('/quote',twoLegacy)).snapshot.shipping_fee_cents,6000);
+ const mixed=f.cart({items:[{id:PRODUCT,quantity:4},{id:'free',quantity:2}]});
+ assert.equal((await f.call('/quote',mixed)).http,409,'NULL without legacy threshold is not zero');
+ f.sql.exec('UPDATE store_commerce_settings SET free_shipping_cents=1');
+ const free=await f.call('/quote',mixed);assert.equal(free.http,200,free.error);assert.equal(free.snapshot.shipping_fee_cents,0);
+ f.sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=0 WHERE id=?').run(PRODUCT);
+ assert.equal((await f.call('/quote',mixed)).snapshot.shipping_fee_cents,0,'all explicitly free remains free');
+});
+test('different per-item shipping or free versus paid refuse checkout until unified; pickup remains free',async t=>{
+ const f=fixture(t);f.sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=5000 WHERE id=?').run(PRODUCT);f.add('other',6000);f.add('free',0);
+ for(const second of ['other','free']){
+  const data=f.cart({items:[{id:PRODUCT,quantity:9},{id:second,quantity:1}]});
+  const q=await f.call('/quote',data);assert.equal(q.http,409);assert.match(q.error,/運費設定不一致/);
+  assert.equal((await f.call('/orders',{...data,quote_hash:'0'.repeat(64),request_key:crypto.randomUUID()})).http,409);
+ }
+ f.sql.exec("UPDATE store_shop_stores SET address='合成路1號',phone='0223456789'");
+ const pickup=f.cart({items:[{id:PRODUCT,quantity:9},{id:'other',quantity:2},{id:'free',quantity:1}],customer:{name:'合成收件人',phone:'0912345678',carrier:'PICKUP'}});
+ const q=await f.call('/quote',pickup);assert.equal(q.http,200,q.error);assert.equal(q.snapshot.shipping_fee_cents,0);assert.equal(f.count('store_commerce_orders'),0);
+});
+test('old clients cannot create new orders, old quotes expire and successful requests replay without a new marker',async t=>{
+ const f=fixture(t),data=f.cart(),q=await f.call('/quote',data);assert.equal(q.http,200,q.error);
+ const unmarked={...data};delete unmarked.shipping_rule_version;
+ for(const version of [undefined,1,3,'2']){
+  const outdated={...unmarked,...(version===undefined?{}:{shipping_rule_version:version})};
+  const stale=await f.call('/quote',outdated);assert.equal(stale.http,426);assert.match(stale.error,/我的網路訂單查核/);assert.match(stale.error,/重新整理/);
+  const noOrder=await f.call('/orders',{...outdated,quote_hash:q.quote_hash,request_key:crypto.randomUUID()});assert.equal(noOrder.http,426);assert.equal(f.count('store_commerce_orders'),0);
+ }
+ const s=q.snapshot;
+ const items=s.items.map(i=>({id:i.id,title:i.title,price_cents:i.price_cents,version:i.version,redeem_type:i.redeem_type,redeem_value:i.redeem_value,shipping_fee_cents:i.configured_shipping_fee_cents,quantity:i.quantity,line_total_cents:i.line_total_cents,max_points:i.max_points,line_shipping_fee_cents:i.configured_shipping_fee_cents==null?null:i.configured_shipping_fee_cents*i.quantity}));
+ const previousSnapshot={shop_id:s.shop_id,shop_name:s.shop_name,shop_version:s.shop_version,settings_version:s.settings_version,buyer_name:s.buyer_name,buyer:s.buyer,items,customer:s.customer,payment_method:s.payment_method,points_used:s.points_used,max_points:s.max_points,discount_cents:s.discount_cents,subtotal_cents:s.subtotal_cents,shipping_fee_cents:s.shipping_fee_cents,legacy_shipping_fee_cents:s.shipping_fee_cents,total_cents:s.total_cents,bank:s.bank};
+ const oldHash=createHash('sha256').update(JSON.stringify({buyer:OWNER,pointIdentity:'',snapshot:previousSnapshot})).digest('hex');
+ assert.notEqual(oldHash,q.quote_hash);
+ const oldQuote=await f.call('/orders',{...data,quote_hash:oldHash,request_key:crypto.randomUUID()});assert.equal(oldQuote.http,409);assert.equal(f.count('store_commerce_orders'),0);
+ const key=crypto.randomUUID(),created=await f.call('/orders',{...data,quote_hash:q.quote_hash,request_key:key});assert.equal(created.http,200,created.error);
+ const originalSnapshot=JSON.stringify(previousSnapshot);f.sql.prepare('UPDATE store_commerce_orders SET snapshot_json=? WHERE id=?').run(originalSnapshot,created.order.id);
+ const replay=await f.call('/orders',{...unmarked,quote_hash:oldHash,request_key:key});assert.equal(replay.http,200);assert.equal(replay.order.id,created.order.id);assert.equal(JSON.stringify(replay.order.snapshot),originalSnapshot);
+ const scoped=await f.call('/orders/lookup?request_key='+key);assert.equal(scoped.order.id,created.order.id);assert.equal(f.count('store_commerce_orders'),1);
 });
 test('shipping edits invalidate quotes and created snapshots stay immutable',async t=>{
  const f=fixture(t);f.sql.prepare('UPDATE store_shop_products SET shipping_fee_cents=8000 WHERE id=?').run(PRODUCT);

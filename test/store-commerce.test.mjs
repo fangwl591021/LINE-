@@ -125,7 +125,7 @@ function fixture(t) {
   return {sql,db,env,hooks,call,setup,order,act};
 }
 const config=(extra={})=>({version:0,enabled:true,bank_name:'測試銀行',bank_code:'004',bank_holder:'測試店',bank_account:'123456789012',shipping_fee_cents:6000,free_shipping_cents:1000000,...extra});
-const cart=(extra={})=>({shop_id:'shop-a',items:[{id:'p-a',quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'購買小陳',phone:'0912345678',email:''},customer:{postal_code:'100',city:'台北市',district:'中正區',name:'收件小林',phone:'0912345678',carrier:'POST',address:'100 台北市測試路1號',store_info:'',note:''},...extra});
+const cart=(extra={})=>({shipping_rule_version:2,shop_id:'shop-a',items:[{id:'p-a',quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'購買小陳',phone:'0912345678',email:''},customer:{postal_code:'100',city:'台北市',district:'中正區',name:'收件小林',phone:'0912345678',carrier:'POST',address:'100 台北市測試路1號',store_info:'',note:''},...extra});
 
 test('free redemption merchants manage remittance orders while gift-only and ordinary accounts cannot sell',async t=>{
   for(const role of ['redeem','扣點用戶','REDEEM']){
@@ -152,8 +152,8 @@ test('full-plan pickup snapshots authoritative shop contacts and charges no ship
   const f=fixture(t);await f.setup();
   f.sql.exec("UPDATE store_shop_stores SET name='真實店名',address='新北市板橋區測試路1號',phone='0223456789' WHERE id='shop-a'; UPDATE store_shop_products SET shipping_fee_cents=8000");
   const input=cart({customer:pickupCustomer(),items:[{id:'p-a',quantity:2}]}),quote=await f.call('/quote',input);
-  assert.equal(quote.status,200);assert.equal(quote.snapshot.shipping_fee_cents,0);assert.equal(quote.snapshot.legacy_shipping_fee_cents,0);
-  assert.equal(quote.snapshot.items[0].line_shipping_fee_cents,0);assert.equal(quote.snapshot.items[0].shipping_fee_cents,0);
+  assert.equal(quote.status,200);assert.equal(quote.snapshot.shipping_fee_cents,0);assert.equal(quote.snapshot.shipping_rule_version,2);
+  assert.equal(quote.snapshot.items[0].configured_shipping_fee_cents,8000);assert.equal('line_shipping_fee_cents' in quote.snapshot.items[0],false);assert.equal('shipping_fee_cents' in quote.snapshot.items[0],false);
   assert.equal(quote.snapshot.total_cents,1760000);assert.equal(quote.snapshot.customer.address,'');
   assert.equal(quote.snapshot.customer.store_info,'真實店名｜新北市板橋區測試路1號｜0223456789');
   assert.equal(quote.snapshot.customer.pickup_address,'新北市板橋區測試路1號');assert.doesNotMatch(JSON.stringify(quote.snapshot),/偽造/);

@@ -107,8 +107,8 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       label('address','地址','input',{maxLength:200});label('phone','電話','input',{maxLength:40});label('hours','營業時間','input',{maxLength:200});
     }else{
       const price=label('price','售價（NT$）','input',{type:'number',min:'0',max:'1000000',step:'0.01',required:true,inputMode:'decimal'});price.value=String(record.price_cents/100);
-      const shipping=label('shipping_fee','單件運費（NT$；0 免運，舊商品留白沿用原店家運費）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});shipping.value=record.shipping_fee_cents==null?'':String(record.shipping_fee_cents/100);
-      form.append(make('p','各商品獨立，單件運費 × 數量加總；不折抵、不套用舊店家滿額免運。不修改舊訂單。'));
+      const shipping=label('shipping_fee','商品運費（NT$；0 免運，留白沿用店家運費）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});shipping.value=record.shipping_fee_cents==null?'':String(record.shipping_fee_cents/100);
+      form.append(make('p','同一家店每筆訂單計一次運費；本次選購商品運費設定不一致時，請店家統一後才能結帳。運費不折抵，不修改舊訂單。'));
       if(onlineAllowed){
         const purchaseMode=label('purchase_mode','銷售方式','select');
         for(const [value,text]of [['in_store','店內消費折抵'],['online','線上購買與折抵']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
@@ -147,7 +147,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         if(type==='product'){
           if(!/^\d+(?:\.\d{1,2})?$/.test(fields.price.value)||Number(fields.price.value)>1000000){setMessage('請填寫有效售價',true);return;}
           const fee=fields.shipping_fee.value;
-          if(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000)){setMessage('請填寫有效單件運費（0 至 10,000 元），0 表示免運',true);return;}
+          if(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000)){setMessage('請填寫有效商品運費（0 至 10,000 元），0 表示免運',true);return;}
           changes.shipping_fee_cents=fee===''?null:Math.round(Number(fee)*100);
           changes.price_cents=Math.round(Number(fields.price.value)*100);
           if(fields.redeem_type){
