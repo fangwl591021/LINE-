@@ -45,8 +45,8 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   field('title','商品名稱','input',{required:true,maxLength:100});
   field('description','商品介紹','textarea',{maxLength:3000,rows:4});
   field('price','售價（NT$）','input',{type:'number',min:'0',max:'1000000',step:'0.01',required:true,inputMode:'decimal'});
-  field('shipping_fee','單件運費（NT$；0 表示免運）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});
-  form.append(make('p','每個商品獨立設定單件運費，按數量加總；網購商品必填，運費不能折抵。'));
+  field('shipping_fee','商品運費（NT$；0 表示免運）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});
+  form.append(make('p','同一家店每筆訂單計一次運費；本次選購商品運費設定不一致時，請店家統一後才能結帳。網購商品必填，運費不能折抵。'));
   select('category','業種分類',[['','請選擇分類'],...['食','宿','遊','購','行','服務','製造'].map(value=>[value,value])]).required=true;
   const picker=field('image_file','商品圖片（JPG／PNG／WebP，最大 10 MB）','input',{type:'file',accept:'image/jpeg,image/png,image/webp'});
   const preview=make('img');preview.alt='商品圖片預覽';preview.hidden=true;form.append(preview);
@@ -90,7 +90,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
       const fee=fields.shipping_fee.value.trim();
       if(!['in_store','online'].includes(fields.purchase_mode.value)||!['none','fixed','percent','full'].includes(fields.redeem_type.value)){status.textContent='請明確選擇銷售方式與購物金折抵方式。';return;}
       if(redeemTarget&&fields.status.value==='active'&&fields.redeem_type.value==='none'){status.textContent='折抵店家上架商品必須提供購物金折抵，請設定折抵方式與上限；尚未設定請先存草稿。';return;}
-      if((fields.purchase_mode.value==='online'&&fee==='')||(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000))){status.textContent='請填寫有效單件運費（0 至 10,000 元），0 表示免運。';return;}
+      if((fields.purchase_mode.value==='online'&&fee==='')||(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000))){status.textContent='請填寫有效商品運費（0 至 10,000 元），0 表示免運。';return;}
       if(!confirm.checked||!fields.title.value.trim()||!fields.category.value||!/^\d+(?:\.\d{1,2})?$/.test(price)||Number(price)>1000000){status.textContent='請確認店家並完整填寫名稱、分類與有效售價。';return;}
       const type=fields.redeem_type.value,amount=['none','full'].includes(type)?0:Number(value.value);
       if(!Number.isSafeInteger(amount)||amount<0||amount>(type==='percent'?100:1000000)||(['fixed','percent'].includes(type)&&amount===0)){status.textContent='請填寫有效折抵上限。';return;}

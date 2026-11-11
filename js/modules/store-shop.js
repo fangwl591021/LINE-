@@ -248,7 +248,7 @@
       if(!owner||!token)throw new Error('請先使用管理員帳號登入');
       pageKind('admin-drafts');const version=++epoch;alert.textContent='';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=12');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=13');if(!current())return;
       await module.mountAdminDrafts(content,{api,isCurrent:current,onBack:()=>run(()=>adminStores()),onManageCatalog:id=>run(()=>adminCatalog(id,'draft'))});
     }
     async function adminCatalog(id,initialMode='products') {
@@ -258,7 +258,7 @@
       pageKind('admin-catalog');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入商城管理…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=12');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=13');if(!current())return;
       await module.mountAdminCatalog(content,{shopId:id,initialMode,api,isCurrent:current,onBack:()=>run(()=>adminStores()),onUploadProducts:shopId=>run(()=>adminProducts(shopId)),prepareImage,
         uploadImage:async base64Image=>{
           if(!current())throw new Error('登入或頁面已變更');
@@ -275,7 +275,7 @@
       pageKind('admin-products');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入代上傳商品…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-products.js?v=6');
+      const module=await import('./store-admin-products.js?v=7');
       if(!current())return;
       await module.mountAdminProducts(content,{shopId:id,api,isCurrent:current,onBack:()=>run(()=>adminStores()),prepareImage,
         uploadImage:async base64Image=>{
@@ -589,7 +589,7 @@
       if(!p.id&&atCapacity())throw new Error(`已達本方案 ${productLimit} 件商品上限，請先封存原商品再新增。`);
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
       const chooseRedemption=redeemProductPlan()&&!p.id;
-      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${input('shipping_fee','單件運費（NT$；0 免運，舊商品留白沿用原店家運費）',p.shipping_fee_cents==null?'':p.shipping_fee_cents/100,20,false,'number')}<p class="shop-meta">每件商品獨立設定，運費 × 數量加總，運費不折抵；新設定不影響舊訂單。</p>${select('redeem_type','點數折抵政策',canTransact()?[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]:[['none','不折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',canTransact()?(p.redeem_value||0):0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'active')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
+      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${input('shipping_fee','商品運費（NT$；0 免運，留白沿用店家運費）',p.shipping_fee_cents==null?'':p.shipping_fee_cents/100,20,false,'number')}<p class="shop-meta">同一家店每筆訂單計一次運費；本次選購商品運費設定不一致時，請統一設定後才能結帳。運費不折抵，新設定不影響舊訂單。</p>${select('redeem_type','點數折抵政策',canTransact()?[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]:[['none','不折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',canTransact()?(p.redeem_value||0):0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'active')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
       editor.scrollIntoView({block:'start',behavior:'smooth'});
       editor.querySelector('[name="description"]').closest('label').insertAdjacentHTML('beforebegin',select('category','商品分類',[['','未分類'],...categories.map(c=>[c,c])],p.category||''));
       editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',canTransact()?[...(chooseRedemption?[['','請選擇銷售方式']]:[]),['in_store',redeemProductPlan()?'店內消費折抵':'限店內'],['online',redeemProductPlan()?'線上購買與折抵':'網購']]:[['in_store','限店內']],chooseRedemption?'':p.purchase_mode||'in_store'));
@@ -764,7 +764,7 @@
                 selected={shop:p.shop,products:[{...p,status:'active'}]};
               }else selected=viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`);
             }
-            const module=await import('./store-commerce.js?v=8');
+            const module=await import('./store-commerce.js?v=9');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,selectedProductId:productId,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }
@@ -909,8 +909,8 @@
               if(!['none','fixed','percent','full'].includes(data.redeem_type))throw new Error('請選擇購物金折抵方式與上限。');
               if(data.status==='active'&&data.redeem_type==='none')throw new Error('折抵店家上架商品必須提供購物金折抵；請選擇指定點數、百分比或全額折抵，或改為草稿保存。');
             }
-            if(data.shipping_fee!==''&&!/^\d+(?:\.\d{1,2})?$/.test(data.shipping_fee))throw new Error('請填寫有效的單件運費，0 表示免運');
-            if(data.purchase_mode==='online'&&data.shipping_fee==='')throw new Error('網購商品請填單件運費；免運請填 0');
+            if(data.shipping_fee!==''&&!/^\d+(?:\.\d{1,2})?$/.test(data.shipping_fee))throw new Error('請填寫有效的商品運費，0 表示免運');
+            if(data.purchase_mode==='online'&&data.shipping_fee==='')throw new Error('網購商品請填商品運費；免運請填 0');
             data.shipping_fee_cents=data.shipping_fee===''?null:Math.round(Number(data.shipping_fee)*100);delete data.shipping_fee;
             data.price_cents=Math.round(Number(data.price)*100); delete data.price;
             data.redeem_value=Number(data.redeem_value);
