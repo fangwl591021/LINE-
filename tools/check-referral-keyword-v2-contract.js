@@ -25,7 +25,8 @@ ok(moduleSource.includes('const referrerId = this.text(userId);'), 'referrer id 
 ok(!moduleSource.includes('identity && identity.canonicalId'), 'referrer id is not replaced by identity canonical id');
 ok(!moduleSource.includes('row && row.point_line_id'), 'referrer id is not replaced by point_line_id');
 ok(!moduleSource.includes('D1WriteModule'), 'keyword module does not write users or cards');
-ok(moduleSource.includes("point_from: 'lineoa-referral-keyword-v2'"), 'invite URL is marked as v2 referral keyword');
+ok(moduleSource.includes('issueFriendReferralForVerifiedUser('), 'invite link uses the verified webhook sender');
+ok(moduleSource.includes('/v1/friend-referral/visit'), 'invite uses signed referral landing');
 ok(moduleSource.includes("action: { type: 'uri', uri: inviteUrl }"), 'QR image opens invite URL');
 ok(moduleSource.includes("label: '\\u5206\\u4eab'"), 'share button exists');
 

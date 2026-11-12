@@ -435,19 +435,15 @@ window.showInviteLink = function(destination = 'function') {
     net: currentNetworkId,
     via: tracking
   };
-  let inviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl(inviteParams) : '';
-  if (!inviteUrl) inviteUrl = window.buildPointLiffUrl ? window.buildPointLiffUrl(inviteParams) : ('https://liff.line.me/' + LIFF_ID + '?ref=' + encodeURIComponent(myUserId) + '&net=' + encodeURIComponent(currentNetworkId) + '&via=' + encodeURIComponent(tracking));
-
-  // Original invite remains the default; store lookup starts only after an explicit choice.
+  // Personal and store invitations retain separate destinations.
   const modal = document.getElementById('invite-link-modal');
   const trackingEl = document.getElementById('invite-tracking-info');
 
   if (trackingEl) trackingEl.textContent = '追蹤碼:' + tracking;
   storeInviteDialog?.controller?.abort();
-  storeInviteDialog = {userId:myUserId, inviteParams, originalUrl:inviteUrl, mode:'function', url:'', request:0};
+  storeInviteDialog = {userId:myUserId, inviteParams, originalUrl:'', mode:'function', url:'', request:0};
   if (modal) modal.classList.remove('hidden');
-  renderInviteDestination(storeInviteDialog, inviteUrl, '原功能頁邀請');
-  if (destination === 'store') return window.selectInviteDestination('store');
+  return window.selectInviteDestination(destination === 'store' ? 'store' : 'function');
 };
 
 window.selectInviteDestination = async function(destination) {
@@ -456,7 +452,24 @@ window.selectInviteDestination = async function(destination) {
   state.controller?.abort();
   const request = ++state.request;
   state.mode = destination === 'store' ? 'store' : 'function';
-  if (state.mode === 'function') return renderInviteDestination(state, state.originalUrl, '原功能頁邀請');
+  if (state.mode === 'function') {
+    renderInviteDestination(state, '', '正在產生個人邀請連結…');
+    const controller = new AbortController();
+    state.controller = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      if (typeof window.createSignedFriendInvite !== 'function') throw new Error('邀請功能尚未載入，請重新整理。');
+      const url = await window.createSignedFriendInvite({ signal: controller.signal });
+      if (!inviteDialogIsCurrent(state) || state.request !== request || state.mode !== 'function') return;
+      state.originalUrl = url;
+      renderInviteDestination(state, url, '原功能頁邀請');
+    } catch (error) {
+      if (inviteDialogIsCurrent(state) && state.request === request) renderInviteDestination(state, '', error.name === 'AbortError' ? '產生邀請連結逾時，請再點一次「原功能頁」重試。' : error.message, true);
+    } finally {
+      clearTimeout(timeout);
+    }
+    return;
+  }
   renderInviteDestination(state, '', '正在確認已公開的店面…');
   const controller = new AbortController();
   state.controller = controller;

@@ -399,30 +399,21 @@ const HomeModule = (function() {
         modal.classList.remove('hidden');
     };
 
-    window.buildHomeInviteUrl = function() {
-        const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
-        const myStoreId = window.currentUser?.storeid || '';
-        const tracking = (myStoreId ? myStoreId + '_' : '') + String(myUserId || '').substring(0, 10);
-        const inviteParams = {
-            ref: myUserId,
-            net: window.currentNetworkId || 'admin',
-            via: tracking,
-            point_friend: '1',
-            point_from: 'lineoa-referral-keyword-v2',
-            from: 'business-engine'
-        };
-        const memberInviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl(inviteParams) : '';
-        if (memberInviteUrl) return memberInviteUrl;
-        if (window.buildPointLiffUrl) {
-            return window.buildPointLiffUrl(inviteParams);
+    let homeInviteCache = null;
+    const homeInviteOwners = new WeakMap();
+    window.buildHomeInviteUrl = async function() {
+        const actor = window.currentUserProfile?.userId || '';
+        const token = window.liff?.isLoggedIn?.() ? window.liff.getAccessToken?.() || '' : '';
+        if (!actor || !token || typeof window.createSignedFriendInvite !== 'function') return '';
+        if (!homeInviteCache || homeInviteCache.actor !== actor || homeInviteCache.token !== token || homeInviteCache.until <= Date.now()) {
+            const cache = { actor, token, until: Date.now() + 5 * 60 * 1000, promise: null };
+            cache.promise = window.createSignedFriendInvite().catch(error => {
+                if (homeInviteCache === cache) homeInviteCache = null;
+                throw error;
+            });
+            homeInviteCache = cache;
         }
-        return 'https://liff.line.me/' + encodeURIComponent(window.LIFF_ID || '') +
-            '?ref=' + encodeURIComponent(myUserId) +
-            '&net=' + encodeURIComponent(window.currentNetworkId || 'admin') +
-            '&via=' + encodeURIComponent(tracking) +
-            '&point_friend=1' +
-            '&point_from=lineoa-referral-keyword-v2' +
-            '&from=business-engine';
+        return homeInviteCache.promise;
     };
 
     window.openProfileRegistrationPanel = function() {
@@ -1397,10 +1388,19 @@ const HomeModule = (function() {
         if (avatarEl && avatarEl.getAttribute('src') !== avatarUrl) avatarEl.src = avatarUrl;
         if (hiddenAvatar) hiddenAvatar.value = avatarUrl;
 
-        const inviteUrl = window.buildHomeInviteUrl();
-        if (qrEl && inviteUrl) {
-            const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=220&margin=1';
-            if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
+        if (qrEl) {
+            const actor = window.currentUserProfile?.userId || '';
+            const token = window.liff?.isLoggedIn?.() ? window.liff.getAccessToken?.() || '' : '';
+            const owner = homeInviteOwners.get(qrEl);
+            if (!owner || owner.actor !== actor || owner.token !== token) {
+                qrEl.removeAttribute('src');
+                homeInviteOwners.set(qrEl, { actor, token });
+            }
+            window.buildHomeInviteUrl().then(inviteUrl => {
+                if (!inviteUrl || window.currentUserProfile?.userId !== actor || !window.liff?.isLoggedIn?.() || window.liff.getAccessToken?.() !== token) return;
+                const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=220&margin=1';
+                if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
+            }).catch(() => { if (window.currentUserProfile?.userId === actor && window.liff?.getAccessToken?.() === token) qrEl.removeAttribute('src'); });
         }
         window.updateHomeProfileOwnerControls?.();
         refreshHomeZodiacButton_();
@@ -1414,7 +1414,7 @@ const HomeModule = (function() {
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[13px]">refresh</span>';
         }
         try {
-            const inviteUrl = window.buildHomeInviteUrl ? window.buildHomeInviteUrl() : '';
+            const inviteUrl = window.buildHomeInviteUrl ? await window.buildHomeInviteUrl() : '';
             if (!inviteUrl) throw new Error('找不到邀約連結');
             const displayName = window.currentUser?.name || window.currentUserProfile?.displayName || 'LINE 好友';
             const text = displayName + ' 邀請你加入 AI商脈系統\n' + inviteUrl;

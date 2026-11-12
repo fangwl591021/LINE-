@@ -378,6 +378,30 @@ window.buildMemberInviteUrl = function(params) {
   return window.buildPointLiffUrl ? window.buildPointLiffUrl(params || {}) : '';
 };
 
+// This is used only by the personal friend invitation, not by store, activity
+// or card links. The server derives the sender from the verified LINE token.
+window.createSignedFriendInvite = async function(options = {}) {
+  const actor = String(window.currentUserProfile?.userId || '');
+  const token = window.liff?.isLoggedIn?.() ? String(window.liff.getAccessToken?.() || '') : '';
+  const base = String(window.Config?.WORKER_URL || '').replace(/\/+$/, '');
+  if (!actor || !token || !base) throw new Error('請先登入，再產生個人邀請連結。');
+  const response = await fetch(base + '/v1/friend-referral/issue', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }), signal: options.signal
+  });
+  if (!response.ok) throw new Error('邀請連結暫時無法產生，請稍後重試。');
+  const result = await response.json();
+  if (!window.liff?.isLoggedIn?.() || window.liff.getAccessToken?.() !== token || window.currentUserProfile?.userId !== actor) {
+    throw new Error('登入身分已變更，請重新產生邀請連結。');
+  }
+  let target;
+  try { target = new URL(result?.url); } catch (_) { throw new Error('邀請連結資料有誤。'); }
+  if (result?.success !== true || target.origin !== new URL(base).origin || target.pathname !== '/v1/friend-referral/visit') {
+    throw new Error('邀請連結資料有誤。');
+  }
+  return target.toString();
+};
+
 // 舊版模組大量使用 $/jQuery；若頁面未事先載入，於 parser 階段同步補上。
 if (!window.jQuery && !window.$) {
   if (document.readyState === 'loading') {
