@@ -267,6 +267,11 @@ function resolveReferralForRegistration(urlRef, urlNet) {
   if (confirmed?.actorUserId === userId) {
     return { referrerId: confirmed.referrerId || '', networkId: confirmed.networkId || 'admin' };
   }
+  const signed = window.verifiedFriendReferralContext;
+  if (signed?.actorUserId === userId) {
+    urlRef = signed.referrerId || '';
+    urlNet = signed.networkId || 'admin';
+  }
   const first = readFirstReferral(userId) || writeFirstReferral(userId, urlRef || '', urlNet || 'admin') || {};
   if (first.confirmed === true && first.source === 'store-invite') {
     return { referrerId: first.referrerId || '', networkId: first.networkId || 'admin' };
@@ -2829,6 +2834,89 @@ window.applyUnregisteredHomeSession = function(options = {}) {
   return true;
 };
 
+// A personal invite is recorded before the optional OA friendship prompt.
+// This request never grants points.
+window.recordFriendReferralBeforeGate = async function(params, context = {}) {
+  const challenge = String(params?.get('friend_referral_challenge') || '').trim();
+  if (!challenge || context.isFeatureRoute) return { status: 'skip' };
+  if (challenge.length > 4096) return { status: 'ineligible' };
+  let token = '';
+  const actor = String(window.currentUserProfile?.userId || '');
+  try {
+    if (!window.liff?.isLoggedIn?.()) return { status: 'unavailable' };
+    token = String(window.liff.getAccessToken?.() || '');
+  } catch (_) { return { status: 'unavailable' }; }
+  if (!token || !actor || !window.Config?.WORKER_URL) return { status: 'unavailable' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(String(window.Config.WORKER_URL).replace(/\/+$/, '') + '/v1/friend-referral/reserve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, challenge }),
+      signal: controller.signal
+    });
+    if (!response.ok) return { status: 'unavailable' };
+    const result = await response.json();
+    if (!window.liff?.isLoggedIn?.() || window.liff.getAccessToken?.() !== token || window.currentUserProfile?.userId !== actor) return { status: 'unavailable' };
+    if (result?.success === true && result?.reserved === true && /^U[0-9a-f]{32}$/i.test(String(result.referrerId || '')) &&
+        typeof result.networkId === 'string' && result.networkId && result.networkId.length <= 128) {
+      return { status: 'recorded', referrerId: result.referrerId, networkId: result.networkId };
+    }
+    return { status: 'ineligible', reason: String(result?.reason || '') };
+  } catch (_) {
+    return { status: 'unavailable' };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+window.ensureFriendReferralBeforeGate = async function(params, context = {}) {
+  const ref = String(params?.get('ref') || '').trim();
+  const challenge = String(params?.get('friend_referral_challenge') || '').trim();
+  if (context.isFeatureRoute) return;
+  if (!challenge) {
+    if (/^U[0-9a-f]{32}$/i.test(ref)) window.showToast?.('這是舊邀請連結；分享獎勵請使用新的個人分享連結。', true);
+    return;
+  }
+  const modal = document.getElementById('friend-referral-modal');
+  const message = document.getElementById('friend-referral-status');
+  const actions = document.getElementById('friend-referral-actions');
+  const retry = document.getElementById('friend-referral-retry');
+  const proceed = document.getElementById('friend-referral-proceed');
+  if (!modal || !message || !actions || !retry || !proceed) {
+    const result = await window.recordFriendReferralBeforeGate(params, context);
+    if (result.status !== 'recorded' && result.status !== 'skip') window.showToast?.('邀請紀錄尚未確認，分享獎勵可能無法成立。', true);
+    return result;
+  }
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  try {
+    while (true) {
+      message.textContent = '正在確認邀請紀錄，請稍候…';
+      actions.classList.add('hidden');
+      const result = await window.recordFriendReferralBeforeGate(params, context);
+      if (result.status === 'recorded' || result.status === 'skip') return result;
+      message.textContent = result.reason === 'already_friend'
+        ? 'LINE 顯示您已是官方帳號好友，無法確認這次邀請贈點。您仍可繼續進入。'
+        : result.status === 'ineligible'
+          ? '無法確認本次邀請贈點，可能已有推薦紀錄或不符合資格。您仍可繼續進入。'
+          : '邀請紀錄尚未確認。您可以重試；若繼續，分享獎勵可能無法成立。';
+      actions.classList.remove('hidden');
+      const choice = await new Promise(resolve => {
+        retry.onclick = () => resolve('retry');
+        proceed.onclick = () => resolve('proceed');
+      });
+      retry.onclick = null;
+      proceed.onclick = null;
+      if (choice === 'proceed') return { status: 'unconfirmed' };
+    }
+  } finally {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+};
+
 window.reorderSettingsSections = function() {
   const page = document.getElementById('page-admin-settings');
   if (!page) return;
@@ -2911,6 +2999,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? await window.getActmasterLiffProfile()
       : await liff.getProfile();
 
+    const isFriendReferralFeatureRoute = Boolean(initialStoreInviteTarget || directStoreManage || directActivity ||
+      initialUrlParams.get('shareCardId') || initialUrlParams.get('claim') ||
+      initialUrlParams.get('likeCardId') || initialUrlParams.get('peopleIslandCard') === '1');
+    const friendReferral = await window.ensureFriendReferralBeforeGate?.(initialUrlParams, { isFeatureRoute: isFriendReferralFeatureRoute });
+    if (friendReferral?.status === 'recorded' && !isFriendReferralFeatureRoute) {
+      writeFirstReferral(window.currentUserProfile.userId, friendReferral.referrerId, friendReferral.networkId);
+    }
+
     window.LoginBootstrap?.stage('friendship');
     if (
       typeof window.ensureActmasterPointFriendship === 'function' &&
@@ -2955,6 +3051,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = (directActivity && initialUrlParams) || window.LoginBootstrap?.initialParams || (typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search));
+    if (initialUrlParams.get('friend_referral_challenge') && !isFriendReferralFeatureRoute) {
+      const verified = friendReferral?.status === 'recorded' ? friendReferral : null;
+      window.verifiedFriendReferralContext = {
+        actorUserId: window.currentUserProfile.userId,
+        referrerId: verified?.referrerId || '', networkId: verified?.networkId || 'admin'
+      };
+      if (verified) {
+        urlParams.set('ref', verified.referrerId);
+        urlParams.set('net', verified.networkId);
+      } else {
+        urlParams.delete('ref');
+        urlParams.delete('net');
+      }
+    }
     const storeInviteTarget = window.StoreInviteRoute?.readTarget(urlParams) || '';
     if (instantLikeCardId) {
       await window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');

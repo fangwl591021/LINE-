@@ -15,6 +15,7 @@ import { handleGameCenter } from './worker/game-center.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { consumeIslandVideoKeywords } from './worker/island-video-card.mjs';
 import { personalShareLink } from './worker/island-entry.mjs';
+import { completeFriendReferral, issueFriendReferralForVerifiedUser } from './worker/friend-referral-credit.mjs';
 import { isCheckinMallEvent, supplementCheckinMallCards } from './worker/checkin-mall-card.mjs';
 import { projectCheckinMallMonitor } from './worker/checkin-mall-monitor.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
@@ -2303,7 +2304,7 @@ const LineOAChatModule = {
   },
 
   followAwardPoints(env) {
-    const raw = env.LINE_OA_FOLLOW_POINTS ?? env.POINT_FOLLOW_POINTS ?? 300;
+    const raw = env.LINE_OA_FOLLOW_POINTS ?? env.POINT_FOLLOW_POINTS ?? 600;
     const points = Number(raw);
     return Number.isFinite(points) && points > 0 ? points : 0;
   },
@@ -2568,6 +2569,20 @@ const LineOAChatModule = {
     const ok = await this.verifySignature(rawBody, signature, env);
     if (!ok && events.length > 0) return new Response('Invalid LINE signature', { status: 401 });
     if (!ok && events.length === 0) return new Response('OK', { status: 200 });
+    const referralEvents = events.filter(event => event?.type === 'follow');
+    if (referralEvents.length) {
+      const referralJob = Promise.all(referralEvents.map(async event => {
+        try {
+          await completeFriendReferral(env.ACTMASTER_DB, event);
+        } catch (_) {
+          // Preserve the existing webhook reply owner. An unavailable database
+          // cannot durably queue this referral; the event ID aids investigation.
+          console.error('friend referral follow recording failed', String(event?.webhookEventId || 'unknown'));
+        }
+      }));
+      if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(referralJob);
+      else await referralJob;
+    }
     const afterMyCard = await this.consumeMyCardEvents(events, env, ctx);
     if (afterMyCard.length !== events.length) {
       events = afterMyCard;
@@ -3404,17 +3419,14 @@ const ReferralFriendKeywordModule = {
     };
   },
 
-  buildInviteUrl(context, env) {
-    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
-    const params = new URLSearchParams({
-      ref: context.referrerId,
-      net: context.networkId || 'admin',
-      via: context.tracking,
-      point_friend: '1',
-      point_from: 'lineoa-referral-keyword-v2',
-      from: 'business-engine'
-    });
-    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  async buildInviteUrl(context, env) {
+    const result = await issueFriendReferralForVerifiedUser(env.ACTMASTER_DB, {
+      userId: context.referrerId, secret: env.LINE_CHANNEL_SECRET
+    }, { networkId: await verifiedFriendReferralNetwork(env, context.referrerId) });
+    if (!result?.ticket) throw new Error('邀請連結無法產生');
+    const url = new URL('https://line-engine.fangwl591021.workers.dev/v1/friend-referral/visit');
+    url.searchParams.set('ticket', result.ticket);
+    return url.toString();
   },
 
   buildLineShareUrl(inviteUrl, context) {
@@ -3477,7 +3489,13 @@ const ReferralFriendKeywordModule = {
       if (!replyToken || !userId) continue;
       const context = await this.resolveContext(env, userId);
       if (!context || !context.referrerId) continue;
-      const inviteUrl = this.buildInviteUrl(context, env);
+      let inviteUrl;
+      try {
+        inviteUrl = await this.buildInviteUrl(context, env);
+      } catch (_) {
+        await LineOAChatModule.replyLine({ replyToken, messages: [{ type: 'text', text: '目前無法產生個人邀請連結，請稍後再試。' }] }, env);
+        return true;
+      }
       const message = this.buildMessage(inviteUrl, context);
       const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
       if (!result.success) console.error('Referral friend keyword reply failed', result);
@@ -3486,6 +3504,17 @@ const ReferralFriendKeywordModule = {
     return false;
   }
 };
+
+// Called only for a server-verified LINE identity, never for a client-supplied
+// referrer. Reuse the same member/role rules as the existing OA share route.
+export async function verifiedFriendReferralNetwork(env, userId) {
+  if (!env.ACTMASTER_DB || !/^U[0-9a-f]{32}$/i.test(String(userId || ''))) throw new Error('無法確認推薦人');
+  const identity = await D1ReadModule.findUserByIdentity(env, userId);
+  const row = identity?.user;
+  if (!row) throw new Error('無法確認推薦人');
+  const role = SecurityModule.sanitizeRole(userId, row.role, row);
+  return SecurityModule.effectiveNetworkId(userId, role, row) || 'admin';
+}
 
 const LineOAStoreSearchKeywordModule = {
   text(value, fallback = '') {
@@ -4976,11 +5005,14 @@ const PointModule = {
     };
   },
 
-  async insertUserPoint(payload, env) {
+  async insertUserPoint(payload, env, options = {}) {
     const apiKey = this.pointApiKey(env);
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
     const rawLineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
-    const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
+    const strictIdentity = typeof options.strictIdentity === 'function' ? options.strictIdentity : null;
+    const lineUserId = strictIdentity
+      ? await strictIdentity()
+      : await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
     if (payload.requireConfirmedResult === true && lineUserId !== rawLineUserId) return {success:false,error:'點數身分已改變，請查單核對'};
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
@@ -5011,6 +5043,9 @@ const PointModule = {
     };
     if (!body.get_point) return { success: false, error: 'Missing point amount', motherMember };
 
+    // The new signed referral alone checks its durable identity snapshot again
+    // immediately before the point write. Database failure must not fall back.
+    if (strictIdentity && await strictIdentity() !== lineUserId) throw new Error('點數身分已改變，請查單核對');
     const res = await fetch(this.insertApiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5648,7 +5683,7 @@ const PointModule = {
       networkId,
       sourceRef,
       pointWallet,
-      message: '加入會員的 300 購物金由加好友流程發放，註冊及受邀獎勵由首次完成會員資料時另行記錄。'
+      message: '加入好友的 600 購物金由加好友流程發放；首次註冊贈 288，分享者獎勵由好友加入流程記錄。'
     };
   },
   async dailyCheckin(payload, env) {
@@ -8670,7 +8705,7 @@ export async function scoreMemberDirectoryBatch(env, actor, member, candidates) 
 
 // Thin bridge only; cashier, PointModule, identity and LINE reply ownership stay unchanged.
 export function deliverRegistrationShoppingCredits(env) {
-  return deliverMemberCredits(env.ACTMASTER_DB, payload => PointModule.insertUserPoint(payload, env));
+  return deliverMemberCredits(env.ACTMASTER_DB, (payload, options) => PointModule.insertUserPoint(payload, env, options));
 }
 
 export const storeCommercePointService = createCommercePointService(PointModule);

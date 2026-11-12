@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import {writeRegistrationWithCredits,deliverMemberCredits,verifyRegistrationActor} from '../worker/member-shopping-credit.mjs';
 import {RETAIL_ROLES} from '../js/modules/store-cooperation-plans.mjs';
 import {isRewardOnlyRole} from '../worker/reward-only-cashier.mjs';
+import {deliverRegistrationShoppingCredits} from '../workerbackup.js';
 
 const uid = n => 'U'+n.repeat(32), buyer=uid('a'), sponsor=uid('b'), other=uid('c');
 const source = readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');
@@ -24,23 +25,23 @@ function fixture(){
   const rows=()=>sql.prepare('SELECT * FROM point_awards ORDER BY points,award_type').all();
   return {sql,db,seed,submit,rows};
 }
-test('new member and follow-only profile both accrue once; two invites, concurrent submits and cron do not duplicate',async()=>{
+test('new member and follow-only profile accrue 288 once; competing referrals and concurrent submits do not create registration referrals',async()=>{
  for(const partial of [false,true]){
   const f=fixture();f.seed(sponsor);f.seed(other);if(partial)f.seed(buyer,'',sponsor);
   await Promise.all([f.submit(partial?other:sponsor),f.submit(other)]);
-  assert.deepEqual(f.rows().map(r=>[r.user_id,r.points,r.point_type]),[[sponsor,50,'gift_money'],[buyer,50,'gift_money'],[buyer,300,'gift_money']]);
+  assert.deepEqual(f.rows().map(r=>[r.user_id,r.points,r.point_type,r.award_type]),[[buyer,288,'gift_money','member_profile_bonus']]);
   const sent=[];const credit=async p=>{sent.push(p);return {success:true,data:{data:{insert_id:51}}};};
   await Promise.all([deliverMemberCredits(f.db,credit),deliverMemberCredits(f.db,credit)]);
   await f.submit();await deliverMemberCredits(f.db,credit);
-  assert.equal(sent.length,3);assert(f.rows().every(r=>r.status==='sent'));f.sql.close();
+  assert.equal(sent.length,1);assert.equal(sent[0].points,288);assert(f.rows().every(r=>r.status==='sent'));f.sql.close();
  }
 });
-test('no referral, unknown, self, same wallet and old completed profiles do not create referral credits',async()=>{
+test('referral state never creates new registration referral credits and completed profiles are not rewarded again',async()=>{
  for(const kind of ['direct','unknown','self','same wallet','old','alias']){
   const f=fixture();if(kind==='same wallet')f.seed(sponsor,'','',buyer);
   if(kind==='old')f.seed(buyer,'0912345678');if(kind==='alias')f.seed(other,'0912345678','',buyer);
   await f.submit(kind==='self'?buyer:kind==='direct'?'':sponsor);
-  assert.deepEqual(f.rows().map(r=>r.points),['old','alias'].includes(kind)?[]:[50]);f.sql.close();
+  assert.deepEqual(f.rows().map(r=>r.points),['old','alias'].includes(kind)?[]:[288]);f.sql.close();
  }
 });
 test('failed profile transaction rolls back all reservations; lost acknowledgement never resends',async()=>{
@@ -48,7 +49,7 @@ test('failed profile transaction rolls back all reservations; lost acknowledgeme
  await assert.rejects(writeRegistrationWithCredits(f.db,{line_id:buyer,name:'會員',phone:'0912345678',referrer_id:sponsor},f.db.prepare('INSERT INTO users(line_id) VALUES(?)').bind(sponsor)));
  assert.equal(f.rows().length,0);await f.submit();let writes=0;const timeout=async()=>{writes++;throw Error('after insert');};
  await deliverMemberCredits(f.db,timeout);await deliverMemberCredits(f.db,timeout);
- assert.equal(writes,3);assert(f.rows().every(r=>r.status==='member_review'));f.sql.close();
+ assert.equal(writes,1);assert(f.rows().every(r=>r.status==='member_review'));f.sql.close();
 });
 test('fresh LINE identity must match the profile; no token, expired token or impersonation',async()=>{
  const original=globalThis.fetch;try{
@@ -56,7 +57,7 @@ test('fresh LINE identity must match the profile; no token, expired token or imp
   for(const [token,id,ok] of [['',buyer,false],['expired',buyer,false],['valid',other,false],['valid',buyer,true]])assert.equal(await verifyRegistrationActor(token,id),ok);
  }finally{globalThis.fetch=original;}
 });
-test('actual follow and daily paths award 300 and 10 gift money only once on simultaneous calls',async()=>{
+test('follow and daily paths reserve 600 and 10 gift money only once on simultaneous calls',async()=>{
  const f=fixture();const credits=[];
  const points={resolvePointUserId:async(_env,id)=>id,ensureAwardTable:async()=>{},ensureMotherLineMember:async()=>({success:true}),taipeiDate:()=> '2026-11-02',
   queryUserPoints:async()=>({success:true,data:{balance:credits.filter(p=>p.userId===buyer).reduce((s,p)=>s+p.points,0),list:[]}}),
@@ -64,10 +65,10 @@ test('actual follow and daily paths award 300 and 10 gift money only once on sim
  const scope={PointModule:points,AdminPointModule:{localBalance:async()=>0},D1ReadModule:{first:async(env,q,args)=>env.ACTMASTER_DB.prepare(q).bind(...args).first()},setTimeout:cb=>cb()};
  const method=(a,b)=>vm.runInNewContext('({'+source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)))+'})',scope);
  Object.assign(points,method('  async dailyCheckin(payload','  async findCustomerByPhone'));
- const follow=method('  async awardLineOAFollowPoints','  async handleFollowPointOnboarding');follow.text=String;follow.followAwardPoints=()=>300;
+ const follow=method('  async awardLineOAFollowPoints','  async handleFollowPointOnboarding');follow.text=String;follow.followAwardPoints=()=>600;
  const env={ACTMASTER_DB:f.db};await Promise.all([1,2].map(()=>follow.awardLineOAFollowPoints(env,buyer)));
  await Promise.all([1,2].map(()=>points.dailyCheckin({userId:buyer},env)));
- assert.deepEqual(credits.map(p=>[p.points,p.pointType]),[[300,'gift_money'],[10,'gift_money']]);f.sql.close();
+ assert.deepEqual(credits.map(p=>[p.points,p.pointType]),[[600,'gift_money'],[10,'gift_money']]);f.sql.close();
 });
 
 test('verified profile save uses the actual registration writer and persists the effective sponsor',async()=>{
@@ -87,8 +88,152 @@ test('verified profile save uses the actual registration writer and persists the
  assert.equal(f.rows().length,0);
  for(let i=0;i<2;i++)assert.equal((await writer.upsertUser(payload,env,{rewardActor:buyer})).success,true);
  assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(buyer).referrer_id,sponsor);
- assert.equal(f.rows().find(r=>r.award_type==='member_inviter_bonus').user_id,sponsor);
- assert.equal(f.rows().length,3);f.sql.close();
+ assert.equal(f.rows().some(r=>r.award_type==='member_inviter_bonus'||r.award_type==='member_invitee_bonus'),false);
+ assert.equal(f.rows().length,1);assert.equal(f.rows()[0].points,288);f.sql.close();
+});
+
+test('legacy queued rewards retain their original amounts; sending, review, sent and unknown rows are never replayed',async()=>{
+ const f=fixture();f.seed(sponsor);await f.submit();
+ const add=(id,user,type,points,status,created='2000-01-01')=>f.sql.prepare(`INSERT INTO point_awards
+   (award_id,user_id,card_id,award_type,points,point_type,status,response_json,created_at)
+   VALUES(?,?,?,?,?,'gift_money',?,'{}',?)`).run(id,user,id,type,points,status,created);
+ add('old-profile',other,'member_profile_bonus',50,'member_ready');
+ add('old-invitee',other,'member_invitee_bonus',300,'member_ready');
+ add('old-inviter',sponsor,'member_inviter_bonus',50,'member_ready');
+ add('already-sent',other,'member_profile_bonus',50,'sent');
+ add('still-sending',other,'member_profile_bonus',50,'member_sending');
+ add('needs-review',other,'member_invitee_bonus',300,'member_review');
+ add('unrecognized-amount',other,'member_profile_bonus',999,'member_ready');
+ add('unrecognized-kind',other,'unexpected_reward',288,'member_ready');
+ const sent=[];const credit=async input=>{sent.push(input);return {success:true,data:{data:{insert_id:51}}};};
+ await Promise.all([deliverMemberCredits(f.db,credit),deliverMemberCredits(f.db,credit)]);
+ await deliverMemberCredits(f.db,credit);
+ assert.deepEqual(sent.map(x=>[x.shop_remark,x.points]).sort(),[
+  ['AWD_member_profile_bonus_'+buyer,288],['old-profile',50],['old-invitee',300],['old-inviter',50]
+ ].sort());
+ const status=id=>f.rows().find(r=>r.award_id===id).status;
+ assert.equal(status('already-sent'),'sent');assert.equal(status('still-sending'),'member_sending');
+ assert.equal(status('needs-review'),'member_review');assert.equal(status('unrecognized-amount'),'member_ready');
+ assert.equal(status('unrecognized-kind'),'member_ready');
+ f.sql.close();
+});
+
+test('invalid queued amounts and user IDs cannot fill the batch and starve valid profile or legacy rewards',async()=>{
+ const f=fixture();
+ const add=(id,user,type,points,created)=>f.sql.prepare(`INSERT INTO point_awards
+   (award_id,user_id,card_id,award_type,points,point_type,status,response_json,created_at)
+   VALUES(?,?,?,?,?,'gift_money','member_ready','{}',?)`).run(id,user,id,type,points,created);
+ for(let i=0;i<12;i++)add('bad-amount-'+i,buyer,'member_profile_bonus',999,'2000-01-01');
+ for(let i=0;i<12;i++)add('bad-uid-'+i,'invalid-'+i,'member_profile_bonus',288,'2000-01-01');
+ add('bad-point-type',buyer,'member_profile_bonus',288,'2000-01-01');
+ f.sql.prepare("UPDATE point_awards SET point_type='system_point' WHERE award_id=?").run('bad-point-type');
+ add('valid-current',buyer,'member_profile_bonus',288,'2026-01-01');
+ add('valid-legacy',sponsor,'member_inviter_bonus',50,'2026-01-01');
+ const sent=[];await deliverMemberCredits(f.db,async input=>{sent.push(input);return {success:true,data:{data:{insert_id:51}}};});
+ assert.deepEqual(sent.map(x=>x.shop_remark).sort(),['valid-current','valid-legacy']);
+ assert.equal(f.rows().filter(r=>r.status==='member_ready').length,25);
+ f.sql.close();
+});
+
+test('a previous profile reservation, whether paid or waiting, is not replaced by the new amount',async()=>{
+ for(const status of ['sent','member_ready','member_sending','member_review']){
+  const f=fixture();f.seed(buyer,'');
+  const awardId='AWD_member_profile_bonus_'+buyer;
+  f.sql.prepare(`INSERT INTO point_awards(award_id,user_id,card_id,award_type,points,point_type,status,response_json)
+   VALUES(?,?,?,'member_profile_bonus',50,'gift_money',?,'{}')`).run(awardId,buyer,buyer,status);
+  await f.submit('');
+  assert.equal(f.rows().length,1);assert.equal(f.rows()[0].points,50);assert.equal(f.rows()[0].status,status);
+  assert.equal(f.sql.prepare('SELECT phone FROM users WHERE line_id=?').get(buyer).phone,'0912345678');
+  f.sql.close();
+ }
+});
+
+function friendClaimFixture() {
+ const sql=new DatabaseSync(':memory:');
+ sql.exec(`CREATE TABLE users(line_id TEXT PRIMARY KEY,row_id TEXT,point_line_id TEXT,legacy_line_id TEXT);
+ CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
+ CREATE TABLE friend_referral_events(event_id TEXT PRIMARY KEY,user_id TEXT,event_time_ms INTEGER,is_unblocked INTEGER);
+ CREATE TABLE point_awards(award_id TEXT PRIMARY KEY,user_id TEXT,card_id TEXT,award_type TEXT,points INTEGER,point_type TEXT,status TEXT,response_json TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT);`);
+ function prepare(query,values=[]){const statement=sql.prepare(query);return {bind:(...args)=>prepare(query,args),
+  run:()=>({meta:{changes:statement.run(...values).changes}}),all:()=>({results:statement.all(...values)}),first:()=>statement.get(...values)};}
+ const db={prepare}, actor=buyer, wallet=sponsor, at=1760000001000;
+ sql.prepare('INSERT INTO users VALUES(?,?,?,?)').run(wallet,wallet,'','');
+ sql.prepare('INSERT INTO friend_referral_events VALUES(?,?,?,0)').run('follow-event',actor,at);
+ const metadata={actor,referrer:wallet,wallet,sponsor:{old:wallet,wallet,ownerLine:wallet,ids:[wallet],linked:false},
+  reservedAt:at-1000,signedReferral:true,followEventId:'follow-event',followAt:at};
+ const add=(id,user,card,body)=>sql.prepare(`INSERT INTO point_awards
+  (award_id,user_id,card_id,award_type,points,point_type,status,response_json) VALUES(?,?,?,'member_inviter_bonus',50,'gift_money','member_ready',?)`)
+  .run(id,user,card,JSON.stringify(body));
+ add('AWD_member_inviter_bonus_'+actor,wallet,actor,metadata);
+ return {sql,db,metadata,actor,wallet,add};
+}
+
+test('new signed friend credit rechecks identity and event atomically, while historical inviter rows remain payable',async()=>{
+ for (const change of ['none','sponsor-wallet','sponsor-shared','sponsor-link','actor-row','actor-link','old-award','event-missing','invalid-snapshot']) {
+  const f=friendClaimFixture(), {sql,actor,wallet}=f;
+  if(change==='sponsor-wallet')sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(other,wallet);
+  if(change==='sponsor-shared')sql.prepare('INSERT INTO users VALUES(?,?,?,?)').run(other,other,wallet,'');
+  if(change==='sponsor-link')sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(wallet,other);
+  if(change==='actor-row')sql.prepare('INSERT INTO users VALUES(?,?,?,?)').run(actor,other,'','');
+  if(change==='actor-link')sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(actor,other);
+  if(change==='old-award')f.add('old-award',wallet,actor,{});
+  if(change==='event-missing')sql.exec('DELETE FROM friend_referral_events');
+  if(change==='invalid-snapshot')sql.prepare('UPDATE point_awards SET response_json=?').run(JSON.stringify({...f.metadata,followAt:0}));
+  if(change!=='old-award')f.add('legacy-inviter',wallet,other,{});
+  const sent=[];const credit=async p=>{sent.push(p.shop_remark);return {success:true,data:{data:{insert_id:1}}};};
+  await Promise.all([deliverMemberCredits(f.db,credit),deliverMemberCredits(f.db,credit)]);
+  const row=sql.prepare('SELECT status FROM point_awards WHERE award_id=?').get('AWD_member_inviter_bonus_'+actor);
+  assert.equal(row.status,change==='none'?'sent':'member_review',change);
+  assert.equal(sent.filter(id=>id==='AWD_member_inviter_bonus_'+actor).length,change==='none'?1:0,change);
+  assert.equal(sent.filter(id=>id===(change==='old-award'?'old-award':'legacy-inviter')).length,1,change);
+  sql.close();
+ }
+});
+
+test('new referral identity recheck fails closed if the database is unavailable',async()=>{
+ const f=friendClaimFixture();let writes=0;
+ f.sql.exec('DROP TABLE user_identity_links');
+ await assert.rejects(deliverMemberCredits(f.db,async()=>{writes++;return {success:true};}));
+ assert.equal(writes,0);
+ assert.equal(f.sql.prepare('SELECT status FROM point_awards').get().status,'member_ready');
+ f.sql.close();
+});
+
+test('actual worker sends signed friend credit only after strict identity reads; old rewards retain their path',async()=>{
+ const originalFetch=globalThis.fetch;
+ try {
+  for (const scenario of ['success','first-read-fails','final-read-fails','mapping-changed-after-claim','mapping-changed-during-setup','legacy']) {
+   const f=friendClaimFixture();let strictReads=0, motherCalls=0, pointCalls=0;
+   f.sql.exec('ALTER TABLE users ADD COLUMN identity_source TEXT');
+   f.sql.exec('ALTER TABLE users ADD COLUMN migrated_at TEXT');
+   const db={prepare(query){const statement=(args=[])=>({bind(...values){return statement(values);},
+    async all(){return {results:f.sql.prepare(query).all(...args)};},
+    async run(){return {meta:{changes:f.sql.prepare(query).run(...args).changes}};},
+    async first(){
+     if(query.includes('SELECT 1 AS verified FROM point_awards')) {
+      strictReads++;
+      if ((scenario==='first-read-fails' && strictReads===1) || (scenario==='final-read-fails' && strictReads===2)) throw Error('synthetic D1 failure');
+      if (scenario==='mapping-changed-after-claim' && strictReads===1) f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(other,sponsor);
+     }
+     return f.sql.prepare(query).get(...args);
+    }
+   });return statement();}};
+   if(scenario==='legacy') f.sql.prepare("UPDATE point_awards SET response_json='{}' WHERE award_id=?").run('AWD_member_inviter_bonus_'+buyer);
+   globalThis.fetch=async(url)=>{
+    if(String(url).includes('insert-user-point')) {pointCalls++;return new Response(JSON.stringify({success:true,data:{insert_id:123}}),{status:200});}
+    motherCalls++;
+    if(scenario==='mapping-changed-during-setup') f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(other,sponsor);
+    return new Response(JSON.stringify({success:true,code:'already_member'}),{status:200});
+   };
+   await deliverRegistrationShoppingCredits({ACTMASTER_DB:db,POINT_API_KEY:'synthetic-test-key'});
+   const status=f.sql.prepare('SELECT status FROM point_awards WHERE award_id=?').get('AWD_member_inviter_bonus_'+buyer).status;
+   assert.equal(pointCalls,['success','legacy'].includes(scenario)?1:0,scenario);
+   assert.equal(status,['success','legacy'].includes(scenario)?'sent':'member_review',scenario);
+   assert.equal(strictReads,scenario==='legacy'?0:['success','final-read-fails','mapping-changed-during-setup'].includes(scenario)?2:1,scenario);
+   assert.equal(motherCalls,['first-read-fails','mapping-changed-after-claim'].includes(scenario)?0:1,scenario);
+   f.sql.close();
+  }
+ } finally {globalThis.fetch=originalFetch;}
 });
 
 // Automatic LINE/profile membership uses the real writer and index SQL. Network,

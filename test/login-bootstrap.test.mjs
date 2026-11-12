@@ -156,6 +156,19 @@ function installAuth(f, { result = { isRegistered: true, info: { userId: actor, 
   vm.runInContext(authSource.slice(start), c);
 }
 
+test('personal referral is attempted after login and before the friendship prompt', async () => {
+  const f = fixture({ query: '?ref=' + otherActor + '&friend_referral_challenge=signed-challenge' });
+  f.context.ensureFriendReferralBeforeGate = async (params, options) => {
+    f.calls.push(['referral-reserve', params.get('friend_referral_challenge'), options.isFeatureRoute]);
+  };
+  installAuth(f, { friendshipPromise: Promise.resolve({ friendFlag: false }) });
+  await f.domReady();
+  const names = f.calls.map(call => call[0]);
+  assert(names.indexOf('profile') < names.indexOf('referral-reserve'));
+  assert(names.indexOf('referral-reserve') < names.indexOf('request-friendship'));
+  assert.equal(f.calls.find(call => call[0] === 'referral-reserve')[1], 'signed-challenge');
+});
+
 test('plain home and plain OAuth callbacks prewarm exactly one captured wrapper', async () => {
   for (const query of ['', '?code=fixture-code&state=opaque-state', '?liffClientId=fixture&liffRedirectUri=https%3A%2F%2Fexample.invalid%2FLINE-%2F&friendship_status_changed=true']) {
     const init = deferred();

@@ -56,7 +56,7 @@
   <link rel="stylesheet" href="css/tutorial-center.css?v=3">
   <link rel="stylesheet" href="css/ai-advance.css?v=3">
   <link rel="stylesheet" href="css/activity-checkin.css?v=1">
-  <script src="js/config.js?v=9.18"></script>
+  <script src="js/config.js?v=9.18&invite=2"></script>
   <script src="js/login-bootstrap.js?v=1"></script>
   <style id="login-bootstrap-style">
     #loading-screen.login-shell { display:flex; flex-direction:column; position:fixed; inset:0; z-index:1000; overflow:auto; align-items:center; justify-content:flex-start; box-sizing:border-box; padding:32px 24px; background:radial-gradient(ellipse at 50% 38%,#fff 0%,#f2fbf8 70%); color:#153e36; }
@@ -2912,6 +2912,17 @@
   </div>
 </div>
 
+<div id="friend-referral-modal" class="hidden fixed inset-0 z-[2450] w-full max-w-md mx-auto left-0 right-0 bg-slate-900/70 backdrop-blur-sm items-center justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="friend-referral-title">
+  <div class="w-full rounded-3xl bg-white p-6 text-center shadow-2xl space-y-5">
+    <h2 id="friend-referral-title" class="text-xl font-black text-slate-800">確認好友邀請</h2>
+    <p id="friend-referral-status" role="status" aria-live="polite" class="text-sm leading-relaxed text-slate-600">正在確認邀請紀錄，請稍候…</p>
+    <div id="friend-referral-actions" class="hidden space-y-3">
+      <button id="friend-referral-retry" type="button" class="w-full rounded-2xl bg-[#06C755] py-4 font-black text-white">重新確認</button>
+      <button id="friend-referral-proceed" type="button" class="w-full rounded-2xl bg-slate-100 py-4 font-black text-slate-700">繼續進入</button>
+    </div>
+  </div>
+</div>
+
 <div id="point-friendship-modal" class="hidden fixed inset-0 z-[2400] w-full max-w-md mx-auto left-0 right-0 bg-slate-900/70 backdrop-blur-sm items-center justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="point-friendship-title">
   <div class="w-full rounded-3xl bg-white p-6 text-center shadow-2xl space-y-5">
     <div class="mx-auto w-16 h-16 rounded-full bg-emerald-50 text-[#06C755] flex items-center justify-center">
@@ -3008,7 +3019,7 @@
     <link rel="stylesheet" href="css/member-hosted-events.css?v=5">
     <script src="js/modules/member-event-dm.js?v=2"></script>
 <script src="js/modules/member-hosted-events.js?v=8"></script>
-<script src="js/modules/home.js?v=8.27"></script>
+<script src="js/modules/home.js?v=8.27&invite=2"></script>
 <script src="js/modules/home-discovery-20261110.js?v=1"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
@@ -3022,12 +3033,12 @@
 <script src="js/modules/partner-onboarding.js?v=1"></script>
 <script src="js/modules/admin-partners.js?v=1.4"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
-<script src="js/modules/crm.js?v=7.9"></script>
+<script src="js/modules/crm.js?v=7.9&invite=2"></script>
   <script src="js/modules/points-wallet-qr.js?v=1"></script>
   <script type="module" src="js/modules/daily-tank-challenge.js?v=5"></script>
   <script type="module" src="js/modules/game-center.mjs?v=2&richman=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=1"></script>
+  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=2"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.3&order=2"></script>
 </body>

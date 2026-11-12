@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch, deliverRegistrationShoppingCredits, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService, getContractAdminNotificationIds, getContractAdminNotificationNames } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, deliverRegistrationShoppingCredits, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService, getContractAdminNotificationIds, getContractAdminNotificationNames, verifiedFriendReferralNetwork } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -27,6 +27,7 @@ import { processApplicationAdminNotifications } from './worker/application-admin
 import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
 import { handleIslandEntry } from './worker/island-entry.mjs';
 import { handleIslandVideoCard } from './worker/island-video-card.mjs';
+import { reserveFriendReferral, issueFriendReferralForToken, visitFriendReferral, reconcileFriendReferralInbox } from './worker/friend-referral-credit.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -403,6 +404,52 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    if (new URL(request.url).pathname === '/v1/friend-referral/issue') {
+      if (request.method === 'OPTIONS') return akaffitCardImagePreflight();
+      if (request.method !== 'POST') return json({ success: false }, 405);
+      if (Number(request.headers.get('Content-Length') || 0) > 4096) return json({ success: false }, 413);
+      const payload = await request.json().catch(() => null);
+      if (!payload || typeof payload.token !== 'string' || !payload.token || payload.token.length > 2048) return json({ success: false }, 400);
+      try {
+        const result = await issueFriendReferralForToken(env.ACTMASTER_DB, { token: payload.token, secret: env.LINE_CHANNEL_SECRET }, {
+          resolveNetwork: userId => verifiedFriendReferralNetwork(env, userId)
+        });
+        if (!result?.ticket) return json({ success: false }, 403);
+        const url = new URL('/v1/friend-referral/visit', request.url);
+        url.searchParams.set('ticket', result.ticket);
+        return json({ success: true, url: url.toString() });
+      } catch (_) {
+        console.error('friend referral invite issue failed');
+        return json({ success: false }, 503);
+      }
+    }
+    if (new URL(request.url).pathname === '/v1/friend-referral/visit') {
+      if (request.method !== 'GET') return json({ success: false }, 405);
+      const ticket = new URL(request.url).searchParams.get('ticket') || '';
+      if (!ticket || ticket.length > 4096) return json({ success: false }, 400);
+      try {
+        const result = await visitFriendReferral({ ticket, secret: env.LINE_CHANNEL_SECRET });
+        if (!result?.entryUrl || !result?.challenge) return new Response('邀請連結無效或已過期，請向分享者取得新的連結。', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+        return new Response(null, { status: 302, headers: { Location: result.entryUrl, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+      } catch (_) {
+        return new Response('邀請連結無效或已過期，請向分享者取得新的連結。', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+      }
+    }
+    if (new URL(request.url).pathname === '/v1/friend-referral/reserve') {
+      if (request.method === 'OPTIONS') return akaffitCardImagePreflight();
+      if (request.method !== 'POST') return json({ success: false }, 405);
+      if (Number(request.headers.get('Content-Length') || 0) > 8192) return json({ success: false }, 413);
+      const payload = await request.json().catch(() => null);
+      if (!payload || typeof payload.token !== 'string' || typeof payload.challenge !== 'string' ||
+          payload.token.length > 2048 || payload.challenge.length > 4096) return json({ success: false }, 400);
+      try {
+        const result = await reserveFriendReferral(env.ACTMASTER_DB, { token: payload.token, challenge: payload.challenge, secret: env.LINE_CHANNEL_SECRET });
+        return json({ success: true, ...result });
+      } catch (_) {
+        console.error('friend referral reservation unavailable');
+        return json({ success: false }, 503);
+      }
+    }
     const islandVideoResponse = await handleIslandVideoCard(request, env);
     if (islandVideoResponse) return islandVideoResponse;
     const islandEntryResponse = await handleIslandEntry(request, env);
@@ -523,6 +570,9 @@ export default {
 
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '* * * * *') {
+      const referralInbox = reconcileFriendReferralInbox(env.ACTMASTER_DB).catch(() => console.error('friend_referral_reconciliation_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(referralInbox);
+      else await referralInbox;
       const credits = deliverRegistrationShoppingCredits(env).catch(() => console.error('member_shopping_credit_delivery_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(credits);
       else await credits;

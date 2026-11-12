@@ -25,7 +25,7 @@ function setup() {
     shareTargetPicker:async messages=>{shared.push(messages);return {status:'success'};}};
   const window = {location:new URL('https://store.test/LINE-/index.html?code=secret&ref=old'), liff,
     Config:{WORKER_URL:'https://worker.test/'}, showToast:(...args)=>toasts.push(args),
-    buildMemberInviteUrl:params=>'https://liff.line.me/test?'+new URLSearchParams(params)};
+    createSignedFriendInvite:async()=> 'https://worker.test/v1/friend-referral/visit?ticket=signed'};
   const context = vm.createContext({window,liff,URL,URLSearchParams,AbortController,AbortSignal,setTimeout,clearTimeout,
     navigator:{clipboard:{writeText:async url=>copied.push(url)}}, document:{getElementById:element},
     currentUserProfile:{userId:'U_OWNER'}, currentUser:{name:'店主',storeid:'not-a-shop-uuid',role:'user'},
@@ -37,11 +37,10 @@ function setup() {
   }
   return {window,context,element,requests,reply,copied,shared,toasts,setToken:value=>token=value};
 }
-test('default remains original invitation without a shop lookup; QR, copy and LINE all use that URL',async()=>{
-  const s=setup();s.window.showInviteLink();
+test('default personal invitation uses a signed link; QR, copy and LINE all use that URL',async()=>{
+  const s=setup();await s.window.showInviteLink();
   const url=s.element('invite-link-input').value;
-  assert.match(url,/^https:\/\/liff.line.me\/test\?/);assert.equal(s.requests.length,0);
-  assert.equal(new URL(url).searchParams.get('ref'),'U_OWNER');
+  assert.equal(url,'https://worker.test/v1/friend-referral/visit?ticket=signed');assert.equal(s.requests.length,0);
   await s.window.copyInviteLink();await s.window.shareInviteLink();
   assert.equal(s.copied[0],url);assert.ok(s.shared[0][0].text.endsWith(url));
   assert.equal(new URL(s.element('invite-qr-img').src).searchParams.get('data'),url);
@@ -66,7 +65,7 @@ test('explicit store choice resolves own active store with a read-only authentic
 });
 
 test('friend invitation cancellation has no success toast and copy does not invoke LINE sharing',async()=>{
-  const s=setup();s.window.showInviteLink();
+  const s=setup();await s.window.showInviteLink();
   await s.window.copyInviteLink();
   assert.equal(s.copied.length,1);assert.equal(s.shared.length,0);
   const before=s.toasts.length;
@@ -77,7 +76,7 @@ test('friend invitation cancellation has no success toast and copy does not invo
 });
 
 test('friend invitation sharing failure reports failure instead of sent',async()=>{
-  const s=setup();s.window.showInviteLink();
+  const s=setup();await s.window.showInviteLink();
   s.window.liff.shareTargetPicker=async()=>{throw Error('synthetic share unavailable');};
   await s.window.shareInviteLink();
   assert.deepEqual(s.toasts,[['發送失敗',true]]);
@@ -102,7 +101,7 @@ test('close, reopen, account changes and token changes discard late store respon
   for (const action of ['close','reopen','account','token']) {
     const s=setup();const pending=s.window.showInviteLink('store');
     if(action==='close')s.window.closeInviteModal();
-    if(action==='reopen'){s.window.closeInviteModal();s.window.showInviteLink();}
+    if(action==='reopen'){s.window.closeInviteModal();await s.window.showInviteLink();}
     if(action==='account')s.context.currentUserProfile={userId:'U_OTHER'};
     if(action==='token')s.setToken('different-token');
     const before=s.element('invite-link-input').value;s.reply();await pending;
@@ -119,7 +118,7 @@ test('second store lookup wins and HTTP failures never leave the previous destin
 test('logged out and tampered input cannot share or perform an owner lookup',async()=>{
   const s=setup();s.setToken('');await s.window.showInviteLink('store');assert.equal(s.requests.length,0);
   assert.match(s.element('invite-destination-status').textContent,/請先登入/);
-  s.setToken('test-token');s.window.showInviteLink();s.element('invite-link-input').value='https://evil.test/';
+  s.setToken('test-token');await s.window.showInviteLink();s.element('invite-link-input').value='https://evil.test/';
   await s.window.copyInviteLink();await s.window.shareInviteLink();assert.equal(s.copied.length+s.shared.length,0);
 });
 test('main and public pages load the same helper before their consumers; lazy store version is synchronized',()=>{
