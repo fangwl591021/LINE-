@@ -91,12 +91,79 @@ async function adminActor(db, uid, profileMapper, includeIdentityProof = false) 
 // Server-side notification reuse; this is the same canonical authority as the admin UI.
 export { adminActor as resolveStoreAdminActor };
 
+// On a conflicting graph, a verified, explicitly configured hard-admin UID
+// can still prove its own account without inheriting anyone else's wallet or
+// aliases. Notifications intentionally use the stricter adminActor above.
+async function exactHardAdmin(db, uid, profileMapper, includeIdentityProof = false) {
+  if (typeof profileMapper?.exactHardAdminIdentity !== 'function') identityConflict();
+  const group = profileMapper.exactHardAdminIdentity(uid);
+  if (!Array.isArray(group) || !group.length || group.length > 8 ||
+      group.some(id => typeof id !== 'string' || !UID.test(id)) ||
+      new Set(group).size !== group.length || !group.includes(uid)) identityConflict();
+  const markers = group.map(() => '?').join(',');
+  const exact = await rows(db, `SELECT ${AUTH_COLUMNS} FROM users u WHERE u.line_id IN (${markers}) LIMIT 3`, group);
+  if (exact.length !== 1) identityConflict();
+  const actor = exact[0];
+  if (!['admin', '總管'].includes(String(actor.role || '').trim().toLowerCase()) ||
+      !group.includes(actor.line_id) || profileMapper(actor)?.role !== 'admin' ||
+      profileMapper.exactHardAdminIdentity(uid, actor) !== true) identityConflict();
+  const links = await rows(db, `SELECT old_line_id,new_line_id FROM user_identity_links
+    WHERE status='active' AND (old_line_id IN (${markers}) OR new_line_id IN (${markers})) LIMIT 3`, [...group, ...group]);
+  let ids;
+  if (links.length === 0 && uid === actor.line_id && !String(actor.legacy_line_id || '').trim()) {
+    ids = [actor.line_id];
+  } else if (links.length === 1 && links[0].old_line_id === actor.legacy_line_id &&
+      links[0].new_line_id === actor.line_id && links[0].old_line_id !== links[0].new_line_id &&
+      group.includes(links[0].old_line_id) && (uid === links[0].old_line_id || uid === links[0].new_line_id)) {
+    ids = [links[0].old_line_id, links[0].new_line_id];
+  } else identityConflict();
+  const proofLinks = links.map(({ old_line_id, new_line_id }) => ({ old_line_id, new_line_id }));
+  return includeIdentityProof ? { actor, identityProof: { mode: 'exact_hard_admin', ids, account_ids: group, links: proofLinks } } : actor;
+}
+
+async function authorizedAdminActor(db, uid, profileMapper, includeIdentityProof = false) {
+  try { return await adminActor(db, uid, profileMapper, includeIdentityProof); }
+  catch (error) {
+    if (!(error instanceof DirectoryError) || error.code !== 'IDENTITY_CONFLICT') throw error;
+    return exactHardAdmin(db, uid, profileMapper, includeIdentityProof);
+  }
+}
+
+// Conflict exceptions are explicitly opted in per existing management route.
+// In particular, paid AI onboarding and partner-finance operations keep the
+// original strict resolver until their own safeguards have been reviewed.
+const conflictAllowedRoutes = new Map([
+  ['/v1/store-shop/admin/stores', ['GET']],
+  ['/v1/store-shop/admin/stores/pin', ['POST']],
+  ['/v1/store-shop/admin/catalog', ['GET', 'POST']],
+  ['/v1/store-shop/admin/catalog/review', ['POST']],
+  ['/v1/store-shop/admin/products', ['GET', 'POST']],
+  ['/v1/reward-units/admin', ['GET', 'POST']],
+  ['/v1/checkin-chat-dashboard', ['GET']],
+  ['/v1/checkin-chat-dashboard/catalog', ['GET']],
+  ['/v1/checkin-chat-dashboard/draft', ['POST']],
+  ['/v1/checkin-chat-dashboard/preview', ['POST']],
+  ['/v1/checkin-chat-dashboard/publish', ['POST']],
+  ['/v1/checkin-mall/report', ['GET']],
+  ...['reward', 'discount', 'partner', 'full'].flatMap(kind => [
+    ['/v1/' + kind + '-applications/admin', ['GET']],
+    ['/v1/' + kind + '-applications/review', ['POST']]
+  ]),
+  ['/v1/partner-applications/admin/organization', ['GET']]
+]);
+function allowsConflictException(request) {
+  const methods = conflictAllowedRoutes.get(new URL(request.url).pathname);
+  return !!methods && methods.includes(request.method);
+}
+
 // Shared verified authority; directory remains read-only. Callers must scope writes separately.
 export async function authorizeStoreAdmin(request, env, profileMapper, fetcher = fetch) {
   const uid = await authenticatedUid(request, fetcher);
   if (!env.ACTMASTER_DB || typeof profileMapper !== 'function') throw new Error('Directory unavailable');
   const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
-  const { actor, identityProof } = await adminActor(db, uid, profileMapper, true);
+  const { actor, identityProof } = await (allowsConflictException(request)
+    ? authorizedAdminActor(db, uid, profileMapper, true)
+    : adminActor(db, uid, profileMapper, true));
   return { uid, db, actor, identityProof };
 }
 
@@ -141,7 +208,7 @@ export async function handleStoreAdmin(request, env, profileMapper, fetcher = fe
     const filter = filters(url.searchParams), uid = await authenticatedUid(request, fetcher);
     if (!env.ACTMASTER_DB || typeof profileMapper !== 'function') throw new Error('Directory unavailable');
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
-    await adminActor(db, uid, profileMapper);
+    await authorizedAdminActor(db, uid, profileMapper);
     return reply(await directory(db, filter,storePinningEnabled(env)));
   } catch (error) {
     if (error instanceof DirectoryError) return reply({ success: false, code: error.code, error: error.message }, error.status);

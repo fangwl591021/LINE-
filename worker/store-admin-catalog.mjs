@@ -1,5 +1,6 @@
 // Shared admin/mobile catalog editing. No identity, payment, reward or order mutations.
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
+import {exactHardAdminWriteGate,exactHardAdminBeforeExternal} from './store-admin-identity-proof.mjs';
 import {normalizeStore,normalizeProduct,requireProductRedemption,isShippingOnlyUpdate,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure,listingPolicyVersion,prepareListingContent,normalizeListingReview} from './store-listing-review.mjs';
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
@@ -75,7 +76,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(!(reviewOnly?['POST']:['GET','POST']).includes(request.method))return reply({success:false,error:'不支援此商城管理操作'},405);
   try{
-    const {uid,db,actor}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
+    const {uid,db,actor,identityProof}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
     if(request.method==='GET'){
       const params=url.searchParams,shopId=params.get('shop'),after=params.get('after')||'',status=params.get('status')||'';
       if(params.has('queue')){
@@ -122,6 +123,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       if(original.status!=='draft')fail('DRAFT_PRODUCT_REQUIRED','僅能檢查尚未公開的商品草稿',409);
       const normalized=normalizeProduct({...original,status:'active'});
       requireProductRedemption(normalized,shop.owner_role);
+      if(!await exactHardAdminBeforeExternal(db,identityProof,uid,actor))fail('ADMIN_CHANGED','管理員身分已更新，請重新登入後重試',409);
       await requireListingReview({value:normalized,parent:shop,scope:'product:'+shop.id+':'+data.id,uid,env,fetcher});
       // Review records may be saved, but this route never reads publish receipts
       // or reaches the catalog audit/update batch, even when the review allows it.
@@ -139,12 +141,16 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     if(data.type==='product')requireProductRedemption(normalized,shop.owner_role);
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
     const releaseProof=release?await releaseVerifier({data,original,shop,db,fetcher}):null;
-    if(!release&&!(data.type==='product'&&isShippingOnlyUpdate(normalized,original)))await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
+    if(!release&&!(data.type==='product'&&isShippingOnlyUpdate(normalized,original))){
+      if(!await exactHardAdminBeforeExternal(db,identityProof,uid,actor))fail('ADMIN_CHANGED','管理員身分已更新，請重新登入後重試',409);
+      await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
+    }
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
     const table=data.type==='store'?'store_shop_stores':'store_shop_products';
-    let gate=`t.id=? AND t.version=? AND EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')})
+    const exact=exactHardAdminWriteGate(identityProof,uid,actor);
+    let gate=`t.id=? AND t.version=? AND EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')}) ${exact?'AND '+exact.sql:''}
       AND EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.owner_uid=? AND s.version=? AND s.status=? AND u.role IS ?)`;
-    const args=[data.id,data.version,...ACTOR.map(key=>actor[key]??null),shop.id,shop.owner_uid,shop.version,shop.status,shop.owner_role];
+    const args=[data.id,data.version,...ACTOR.map(key=>actor[key]??null),...(exact?.args||[]),shop.id,shop.owner_uid,shop.version,shop.status,shop.owner_role];
     if(data.type==='product'){
       gate+=" AND t.shop_id=? AND t.status!='archived'";args.push(shop.id);
       if(updated.status!=='archived'){

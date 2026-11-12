@@ -1,5 +1,6 @@
 // Administrative display config only. No point writes, mother forwarding or LINE sends.
 import { authorizeStoreAdmin } from './store-admin.mjs';
+import { exactHardAdminWriteGate } from './store-admin-identity-proof.mjs';
 import { CheckinDashboardError, defaultCheckinDashboardConfig, normalizeCheckinDashboardConfig, buildCheckinDashboardMessage } from './checkin-chat-dashboard-render.mjs';
 import { readDashboardProductCatalog, resolveDashboardProductPages, dashboardProductVisibilityGate, normalizeDashboardProduct } from './checkin-dashboard-products.mjs';
 const ROOT = '/v1/checkin-chat-dashboard', KEY = 'member_checkin';
@@ -83,7 +84,9 @@ export async function readCheckinDashboardSnapshots(db, cardIds) {
 }
 export async function readCheckinDashboardSnapshot(db, cardId) { return (await readCheckinDashboardSnapshots(db, [cardId])).get(cardId) || null; }
 async function hash(value) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
-async function authorityGate(db, uid, actor) {
+async function authorityGate(db, uid, actor, identityProof) {
+  const exact=exactHardAdminWriteGate(identityProof,uid,actor);
+  if(exact)return {sql:`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(field => 'a.' + field + ' IS ?').join(' AND ')}) AND ${exact.sql}`,args:[...ACTOR.map(field=>actor[field]??null),...exact.args]};
   const actorIds = IDS.map(field => actor[field]).filter(value => typeof value === 'string' && value);
   const initial = [...new Set([uid, ...actorIds])], initialMarks = initial.map(() => '?').join(',');
   const links = await db.prepare(`SELECT old_line_id,new_line_id FROM user_identity_links WHERE status='active' AND (old_line_id IN (${initialMarks}) OR new_line_id IN (${initialMarks})) ORDER BY old_line_id,new_line_id LIMIT 3`).bind(...initial, ...initial).all();
@@ -110,7 +113,7 @@ export async function handleCheckinChatDashboard(request, env, profileMapper, fe
     if (url.search&&action!=='catalog') fail('INVALID_QUERY', '卡片設定不接受網址參數');
     if ((!action && request.method !== 'GET') || (action && !['draft', 'publish', 'preview','catalog'].includes(action))) fail('NOT_FOUND', '查無此卡片設定功能', 404);
     if (action && request.method !== (action==='catalog'?'GET':'POST')) fail('METHOD_NOT_ALLOWED', '請使用正確的儲存方式', 405);
-    const { uid, db, actor } = await authorizeStoreAdmin(request, env, profileMapper, fetcher);
+    const { uid, db, actor, identityProof } = await authorizeStoreAdmin(request, env, profileMapper, fetcher);
     if(action==='catalog')return reply(await readDashboardProductCatalog(db,url.searchParams));
     if (!action) return reply(await payload(db,await current(db)));
     const input = await json(request);
@@ -132,7 +135,7 @@ export async function handleCheckinChatDashboard(request, env, profileMapper, fe
     if(selected?.unavailableProducts.length){const error=new CheckinDashboardError('PRODUCT_UNAVAILABLE','所選商品目前不可公開顯示，請保留草稿並重新挑選',409);error.unavailableProducts=selected.unavailableProducts;throw error;}
     if(selected)buildCheckinDashboardMessage({POINT_LIFF_ID:'1-'+'a'.repeat(98)},'00000000-0000-0000-0000-000000000000',Number.MAX_SAFE_INTEGER,Date.parse('9999-01-01T00:00:00Z'),template(row).draftConfig,selected.productSnapshots);
     const productGate=dashboardProductVisibilityGate(selected?.productSnapshots||[]);
-    const gate = await authorityGate(db, uid, actor), at = new Date(now).toISOString();
+    const gate = await authorityGate(db, uid, actor, identityProof), at = new Date(now).toISOString();
     const common = [at, uid, input.requestKey, digest, action, uid, KEY, input.expectedDraftRevision];
     const statement = action === 'draft'
       ? db.prepare(`UPDATE checkin_chat_dashboard_templates SET draft_json=?,draft_revision=draft_revision+1,updated_at=?,updated_by=?,last_request_key=?,last_request_hash=?,last_request_action=?,last_request_actor=? WHERE template_key=? AND draft_revision=? AND last_request_key IS NOT ? AND ${gate.sql}`).bind(JSON.stringify(normalized), ...common, input.requestKey, ...gate.args)

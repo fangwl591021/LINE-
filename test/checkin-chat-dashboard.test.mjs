@@ -8,7 +8,7 @@ import { supplementCheckinMallCards } from '../worker/checkin-mall-card.mjs';
 const A = 'U' + '1'.repeat(32), B = 'U' + '2'.repeat(32), ADMIN = 'U' + '3'.repeat(32), OLD = 'U' + '4'.repeat(32);
 const NOW = Date.parse('2026-10-25T04:00:00Z'), CARD = '11111111-1111-1111-1111-111111111111';
 const defaultConfig = () => normalizeCheckinDashboardConfig(defaultCheckinDashboardConfig());
-function fixture(t) {
+function fixture(t,{hardGroup=null}={}) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(`PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT ''); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT); CREATE TABLE protected_points(id INTEGER,balance INTEGER); INSERT INTO protected_points VALUES(1,999);`);
   for (const file of ['0063_checkin_mall_cards.sql', '0071_checkin_chat_dashboard.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
@@ -30,6 +30,7 @@ function fixture(t) {
     assert.equal(url, 'https://api.line.me/v2/bot/message/push'); pushes.push(JSON.parse(options.body)); return Response.json({});
   };
   const mapper = row => ({ role: row.role });
+  if(hardGroup)mapper.exactHardAdminIdentity=(uid,row)=>!hardGroup.includes(uid)?(row?false:[]):!row?[...hardGroup]:(hardGroup.includes(row.line_id)&&row.role==='admin'&&row.name==='測試會員');
   const call = async (path = '', body, uid = ADMIN, method = body ? 'POST' : 'GET') => {
     const request = new Request('https://worker.test/v1/checkin-chat-dashboard' + path, { method, headers: { ...(uid ? { Authorization: 'Bearer ' + uid } : {}), 'Content-Type': 'application/json' }, ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}) });
     const response = await handleCheckinChatDashboard(request, env, mapper, fetcher, NOW); return { status: response.status, ...await response.json() };
@@ -99,6 +100,24 @@ test('role revocation and active-link changes immediately before atomic UPDATE c
   f.sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(ADMIN); f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD, ADMIN);
   f.setHook(() => f.sql.prepare("UPDATE user_identity_links SET status='revoked'").run()); assert.equal((await f.save(defaultConfig(), 0, crypto.randomUUID(), OLD)).status, 409);
   assert.equal(f.sql.prepare('SELECT draft_revision FROM checkin_chat_dashboard_templates').get().draft_revision, 0);
+});
+test('hard-admin dashboard draft and publish recheck full trusted identity proof',async t=>{
+ for(const scenario of ['valid','role','link','extra-link','group-row']){
+  const f=fixture(t,{hardGroup:[OLD,ADMIN]});
+  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,A);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD,ADMIN);
+  if(scenario!=='valid')f.setHook(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(OLD);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,A);
+   if(scenario==='group-row')f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(OLD,OLD);
+  });
+  assert.equal((await f.save()).status,scenario==='valid'?200:409,scenario);
+  assert.equal(f.sql.prepare('SELECT draft_revision FROM checkin_chat_dashboard_templates').get().draft_revision,scenario==='valid'?1:0,scenario);
+  if(scenario==='valid')assert.equal((await f.publish(1,0,crypto.randomUUID(),OLD)).status,200);
+  assert.equal(f.sql.prepare('SELECT balance FROM protected_points').get().balance,999);
+ }
 });
 test('published read failures fall back safely without touching either draft or protected tables', async t => {
   const f = fixture(t); f.sql.prepare("UPDATE checkin_chat_dashboard_templates SET published_json='invalid'").run();

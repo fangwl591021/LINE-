@@ -3,6 +3,15 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const count=value=>Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):0;
 const number=value=>count(value).toLocaleString('zh-TW');
 const canPin=shop=>uuid.test(String(shop.id))&&typeof shop.pinned==='boolean'&&Number.isSafeInteger(shop.pin_version)&&shop.pin_version>=0&&['shop','partner'].includes(shop.pin_source);
+// The directory API provides stable error codes. Never render arbitrary server
+// messages, which can contain internal details or private data.
+function directoryErrorMessage(error){
+  if(error?.code==='IDENTITY_CONFLICT')return '帳號身分資料有衝突，暫時無法讀取店家列表；請聯絡總管核對。';
+  if(['AUTH_REQUIRED','AUTH_EXPIRED','AUTH_INVALID'].includes(error?.code)||error?.status===401)return 'LINE 登入已失效或無法確認，請重新登入後再試。';
+  if(error?.code==='ADMIN_REQUIRED'||error?.status===403)return '目前帳號沒有管理員查詢權限，請聯絡總管確認。';
+  if(error?.code==='AUTH_UNAVAILABLE')return 'LINE 身分驗證暫時無法完成，請稍後重試。';
+  return '無法讀取店家列表，請重新整理或重試。';
+}
 
 // Private directory data stays in this mount only, never in a shared/global cache.
 export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners,onUploadProducts,onManageCatalog,onReviewDrafts}) {
@@ -123,7 +132,7 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
   async function load(targetPage=0,targetCursor='') {
     if(!active())return;
     const version=++sequence,requestSearch={...search};lastRequest={page:targetPage,cursor:targetCursor};busy=true;shown=false;retry.hidden=true;controls();
-    list.replaceChildren();pinHelp.hidden=true;list.setAttribute('aria-busy','true');status.textContent='讀取店家列表中…';
+    list.replaceChildren();pinHelp.hidden=true;list.setAttribute('aria-busy','true');status.setAttribute('style','');status.textContent='讀取店家列表中…';
     const params=new URLSearchParams();if(requestSearch.q)params.set('q',requestSearch.q);if(requestSearch.status)params.set('status',requestSearch.status);if(targetCursor)params.set('after',targetCursor);
     try{
       const report=await api('/admin/stores'+(params.size?'?'+params:''),null,true);
@@ -136,9 +145,9 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
       else list.append(make('p','store-admin-empty',requestSearch.q||requestSearch.status?'沒有符合條件的店家。':'目前沒有店家。'));
       pageLabel.textContent='第 '+(page+1)+' 頁';
       status.textContent='符合條件 '+number(report.filtered_total)+' 家'+(report.shops.length?' · 本頁 '+report.shops.length+' 家':'');
-    }catch{
+    }catch(error){
       if(!active()||version!==sequence)return;
-      status.textContent='無法讀取店家列表，請重新整理或重試。';retry.hidden=false;
+      status.setAttribute('style','color:#b42318');status.textContent=directoryErrorMessage(error);retry.hidden=false;
     }finally{
       if(active()&&version===sequence){busy=false;list.setAttribute('aria-busy','false');controls();}
     }

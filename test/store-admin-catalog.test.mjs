@@ -9,6 +9,7 @@ import worker from '../worker-entry.mjs';
 import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3);
+const ADMIN_OLD='U050397a077bef628b317b0bbedeb2187';
 const payload=(extra={})=>({type:'product',id:id(10),shop_id:id(1),version:1,shop_version:1,request_key:id(99),changes:{title:'更新商品',status:'active'},...extra});
 test('global draft queue is read-only, paged across eligible shops and contains no member details',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
@@ -45,10 +46,11 @@ function fixture(){
   for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'redeem']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'合成會員');
   for(const [n,owner]of [[1,OWNER],[2,MEMBER]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(id(n),owner,'店家'+n);
   for(const [n,shop]of [[10,1],[11,2]])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key,category) VALUES(?,?,'原商品',100,'now',?,'食')").run(id(n),id(shop),id(n));
-  let beforeBatch=null,failUpdate=false,queue=Promise.resolve();
+  let beforeBatch=null,beforeExternal=null,failUpdate=false,externalCalls=0,queue=Promise.resolve();
   const db={withSession(){return this;},prepare(query){
     const stmt=(args=[])=>({bind(...values){return stmt(values);},async all(){
       if(failUpdate&&query.startsWith('UPDATE store_shop_'))throw new Error('synthetic private failure');
+      if(beforeExternal&&query.startsWith('SELECT 1 AS authorized FROM users a')){const fn=beforeExternal;beforeExternal=null;fn();}
       const results=sql.prepare(query).all(...args);return {success:true,results,meta:{changes:sql.prepare('SELECT changes() n').get().n}};
     },async first(){return (await this.all()).results[0]||null;},async run(){return this.all();}});return stmt();
   },async batch(statements){
@@ -58,16 +60,17 @@ function fixture(){
     catch(error){sql.exec('ROLLBACK');throw error;}finally{release();}
   }};
   const env=listingTestEnv(sql,db);
-  const fetcher=listingTestFetch(async(_url,options)=>{const user=options.headers.Authorization.slice(7);return /^U[0-9a-f]{32}$/.test(user)?Response.json({userId:user}):new Response('',{status:401});});
-  const call=async(data=null,actor=ADMIN,query='shop='+id(1))=>{
-    const response=await handleStoreAdminCatalog(new Request('https://test.invalid/v1/store-shop/admin/catalog'+(data?'':'?'+query),{method:data?'POST':'GET',headers:actor?{Authorization:'Bearer '+actor}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})}),env,storeInviteProfileView,fetcher);
+  const baseFetcher=listingTestFetch(async(_url,options)=>{const user=options.headers.Authorization.slice(7);return /^U[0-9a-f]{32}$/.test(user)?Response.json({userId:user}):new Response('',{status:401});});
+  const fetcher=(url,options)=>{if(url!=='https://api.line.me/v2/profile')externalCalls++;return baseFetcher(url,options);};
+  const call=async(data=null,actor=ADMIN,query='shop='+id(1),suffix='')=>{
+    const response=await handleStoreAdminCatalog(new Request('https://test.invalid/v1/store-shop/admin/catalog'+suffix+(data?'':'?'+query),{method:data?'POST':'GET',headers:actor?{Authorization:'Bearer '+actor}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})}),env,storeInviteProfileView,fetcher);
     return {http:response.status,...await response.json()};
   };
   const publicStore=async()=>{
     const response=await handleStoreShop(new Request('https://test.invalid/v1/store-shop?shop='+id(1)),{ACTMASTER_DB:db},fetcher);
     return {http:response.status,...await response.json()};
   };
-  return {sql,call,publicStore,db,fetcher,before:fn=>{beforeBatch=fn;},fail:()=>{failUpdate=true;},audit:()=>sql.prepare('SELECT * FROM store_catalog_admin_audit').all(),product:()=>sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(10))};
+  return {sql,call,publicStore,db,fetcher,before:fn=>{beforeBatch=fn;},beforeExternal:fn=>{beforeExternal=fn;},get externalCalls(){return externalCalls;},fail:()=>{failUpdate=true;},audit:()=>sql.prepare('SELECT * FROM store_catalog_admin_audit').all(),product:()=>sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(10))};
 }
 test('shared catalog write is visible in existing public/mobile API and leaves identities/policies intact',async t=>{
   const f=fixture();t.after(()=>f.sql.close());const users=JSON.stringify(f.sql.prepare('SELECT * FROM users').all());
@@ -78,6 +81,39 @@ test('shared catalog write is visible in existing public/mobile API and leaves i
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users').all()),users);assert.equal(f.audit().length,1);
   const before=JSON.parse(f.audit()[0].before_json);assert.equal(before.title,'原商品');
   const hidden=await f.call(payload({version:2,request_key:id(98),changes:{status:'draft'}}));assert.equal(hidden.http,200);assert.equal((await f.publicStore()).products.length,0);
+});
+test('hard admin catalog changes recheck trusted UID group and direct link at the write',async t=>{
+ for(const scenario of ['valid','role','link','extra-link','group-row']){
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  if(scenario!=='valid')f.before(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,OWNER);
+   if(scenario==='group-row')f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(ADMIN_OLD,ADMIN_OLD);
+  });
+  assert.equal((await f.call(payload(),ADMIN)).http,scenario==='valid'?200:409,scenario);
+  assert.equal(f.audit().length,scenario==='valid'?1:0,scenario);
+  assert.equal(f.product().title,scenario==='valid'?'更新商品':'原商品',scenario);
+ }
+});
+test('catalog activation and review-only recheck hard-admin identity before external review',async t=>{
+ for(const route of ['','/review'])for(const scenario of ['role','link','database']){
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.beforeExternal(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
+   if(scenario==='database')throw Error('synthetic unavailable');
+  });
+  const data=route?payload({changes:{status:'active'}}):payload();
+  assert.equal((await f.call(data,ADMIN,'',route)).http,scenario==='database'?503:409,route+' '+scenario);
+  assert.equal(f.externalCalls,0,route+' '+scenario);assert.equal(f.audit().length,0,route+' '+scenario);
+ }
 });
 test('store edit uses same store id and version while preserving ownership',async t=>{
   const f=fixture();t.after(()=>f.sql.close());const data=payload({type:'store',id:id(1),changes:{name:'新店名',phone:'0212345678'}});

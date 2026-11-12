@@ -1,5 +1,6 @@
 // Public, explicitly reviewed snapshots of CRM reward units. Never awards points.
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
+import {exactHardAdminWriteGate,exactHardAdminBeforeExternal} from './store-admin-identity-proof.mjs';
 import {readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 const PATH='/v1/reward-units',ADMIN=PATH+'/admin';
@@ -46,7 +47,7 @@ async function adminGet(db,id){
   const bounded=(value,max)=>String(value||'').trim().slice(0,max);
   return {success:true,member_name:member.name,unit:{id:'',version:0,status:'draft',name:bounded(card.company_name,160),description:bounded(card.services,2000),phone:bounded(card.office_phone,40),address:bounded(card.address,300),website_url:bounded(card.website,500),image_url:'',reward_terms:''}};
 }
-async function save(request,env,db,uid,actor,fetcher){
+async function save(request,env,db,uid,actor,identityProof,fetcher){
   const data=await readJson(request);
   if(Object.keys(data).some(k=>!['target_uid','version','request_key','unit','confirmed_public'].includes(k))||typeof data.target_uid!=='string'||!UID.test(data.target_uid)||typeof data.request_key!=='string'||!UUID.test(data.request_key)||!Number.isSafeInteger(data.version)||data.version<0||data.version>1e9)fail('INVALID_REQUEST','儲存資料不正確，請重新開啟表單');
   const unit=normalize(data),payload=JSON.stringify({target_uid:data.target_uid,version:data.version,unit,confirmed_public:data.confirmed_public===true});
@@ -54,15 +55,17 @@ async function save(request,env,db,uid,actor,fetcher){
   const member=await target(db,data.target_uid),old=(await rows(db,'SELECT * FROM reward_unit_publications WHERE target_uid=?',[data.target_uid]))[0];
   if((old?.version||0)!==data.version)fail('VERSION_CONFLICT','資料已更新，請重新開啟後再修改',409);
   const id=old?.id||crypto.randomUUID();
+  if(!await exactHardAdminBeforeExternal(db,identityProof,uid,actor))fail('ADMIN_CHANGED','管理員身分已更新，請重新登入後重試',409);
   await requireListingReview({value:{status:unit.status,name:unit.name,description:[unit.description,unit.address].filter(Boolean).join('\n'),image_url:unit.image_url,website:unit.website_url,policy_note:unit.reward_terms},scope:'reward-unit:'+id,uid,env,fetcher});
   const auditId=crypto.randomUUID(),now=new Date().toISOString();
-  const gate=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(k=>'a.'+k+' IS ?').join(' AND ')})
+  const exact=exactHardAdminWriteGate(identityProof,uid,actor);
+  const gate=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(k=>'a.'+k+' IS ?').join(' AND ')}) ${exact?'AND '+exact.sql:''}
     AND EXISTS(SELECT 1 FROM users t WHERE t.row_id=? AND t.line_id=? AND t.role='reward')
     AND COALESCE((SELECT version FROM reward_unit_publications WHERE target_uid=?),0)=?`;
   const result=await db.batch([
     db.prepare(`INSERT INTO reward_unit_publication_audit(id,request_key,actor_uid,target_uid,unit_id,old_version,new_version,payload_json,before_json,after_json,created_at)
       SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} ON CONFLICT(request_key) DO NOTHING`)
-      .bind(auditId,data.request_key,uid,data.target_uid,id,data.version,data.version+1,payload,JSON.stringify(old?{...publicView(old),status:old.status}:null),JSON.stringify(unit),now,...ACTOR.map(k=>actor[k]??null),member.row_id,member.line_id,data.target_uid,data.version),
+      .bind(auditId,data.request_key,uid,data.target_uid,id,data.version,data.version+1,payload,JSON.stringify(old?{...publicView(old),status:old.status}:null),JSON.stringify(unit),now,...ACTOR.map(k=>actor[k]??null),...(exact?.args||[]),member.row_id,member.line_id,data.target_uid,data.version),
     db.prepare(`INSERT INTO reward_unit_publications(id,target_uid,${FIELDS.join(',')},version,updated_at)
       SELECT ?,?,${FIELDS.map(()=>'?').join(',')},?,? WHERE EXISTS(SELECT 1 FROM reward_unit_publication_audit WHERE id=?)
       ON CONFLICT(target_uid) DO UPDATE SET ${FIELDS.map(k=>k+'=excluded.'+k).join(',')},version=excluded.version,updated_at=excluded.updated_at`)
@@ -79,8 +82,8 @@ export async function handleRewardUnits(request,env,profileMapper,fetcher=fetch)
   if(!['GET',...(url.pathname===ADMIN?['POST']:[])].includes(request.method))return reply({success:false,error:'不支援此操作'},405);
   try{
     if(url.pathname===ADMIN){
-      const {uid,db,actor}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
-      if(request.method==='POST'){if(url.search)fail('INVALID_QUERY','儲存不可附加查詢參數');return reply(await save(request,env,db,uid,actor,fetcher));}
+      const {uid,db,actor,identityProof}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
+      if(request.method==='POST'){if(url.search)fail('INVALID_QUERY','儲存不可附加查詢參數');return reply(await save(request,env,db,uid,actor,identityProof,fetcher));}
       query(url.searchParams,['target']);const id=url.searchParams.get('target');if(!UID.test(id||''))fail('INVALID_TARGET','請從 CRM 贈點帳號開啟');
       return reply(await adminGet(db,id));
     }

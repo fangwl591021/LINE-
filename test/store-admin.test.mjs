@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { handleStoreAdmin } from '../worker/store-admin.mjs';
-import { storeInviteProfileView } from '../workerbackup.js';
+import { handleStoreAdmin, authorizeStoreAdmin, resolveStoreAdminActor } from '../worker/store-admin.mjs';
+import { storeInviteProfileView, getContractAdminNotificationIds, getContractAdminNotificationNames } from '../workerbackup.js';
 
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), D = 'U' + 'd'.repeat(32), E = 'U' + 'e'.repeat(32);
 const HARD_ADMIN = 'Uf729764dbb5b652a5a90a467320bea29';
@@ -75,10 +75,11 @@ function fixture(options = {}) {
     calls.push({ url, init }); assert.equal(url, 'https://api.line.me/v2/profile'); assert.ok(init.signal instanceof AbortSignal); assert.equal(init.redirect, 'manual');
     if (options.authFailure) throw new Error('upstream secret failure');
     if (options.authResponse) return options.authResponse();
-    const token = init.headers.Authorization.slice(7), uid = { admin: A, store: B, user: C, reward: D, alias: E, canonical: HARD_ADMIN }[token];
+    const token = init.headers.Authorization.slice(7), uid = { admin: A, store: B, user: C, reward: D, alias: E, canonical: HARD_ADMIN, ...options.tokens }[token];
     return uid ? Response.json({ userId: uid, displayName: '不可信的 LINE 名稱', ...(options.profile || {}) }) : new Response('', { status: 401 });
   };
   const roleMapper = row => { mapped.push(row); return (options.mapper || mapper)(row); };
+  if (options.mapper?.exactHardAdminIdentity) roleMapper.exactHardAdminIdentity = options.mapper.exactHardAdminIdentity;
   async function response(query = '', token = 'admin', method = 'GET', headers = {}) {
     return handleStoreAdmin(new Request(PATH + (query ? '?' + query : ''), { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers } }), env, roleMapper, fetcher);
   }
@@ -166,6 +167,88 @@ test('identity aliases reveal second-hop conflicts before canonical role mapping
     f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(E, A); f.link(E, B);
     assert.equal((await f.call()).status, 409); assert.equal(f.mapped.length, 0);
   } finally { f.sql.close(); }
+});
+
+test('verified existing hard admin uses only its direct existing link despite unrelated shared wallet rows', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[2], current=ids[3], name=getContractAdminNotificationNames().at(-1);
+  const x1='U'+'1'.repeat(32),x3='U'+'3'.repeat(32);
+  const f=fixture({mapper:storeInviteProfileView,tokens:{old,current,x1,x3}});
+  try {
+    f.user(current,{name,role:'admin',legacy_line_id:old,point_line_id:current});
+    f.user(x1,{name:'其他會員',role:'user',legacy_line_id:x3,point_line_id:current});
+    f.user(x3,{name:'其他會員舊帳號',role:'user'});
+    f.link(old,current);f.link(x3,x1);
+    const before=f.snapshot();
+    assert.equal((await f.call('','old')).status,200);
+    assert.equal((await f.call('','current')).status,200);
+    assert.equal((await f.call('','x1')).status,409);
+    assert.equal((await f.call('','x3')).status,409);
+    const req=new Request(PATH,{headers:{Authorization:'Bearer current'}});
+    const auth=await authorizeStoreAdmin(req,f.env,f.roleMapper,f.fetcher);
+    assert.deepEqual(auth.identityProof,{mode:'exact_hard_admin',ids:[old,current],account_ids:[old,current],links:[{old_line_id:old,new_line_id:current}]});
+    // Notification recipient verification intentionally retains strict graph handling.
+    await assert.rejects(()=>resolveStoreAdminActor(f.db,current,f.roleMapper),e=>e.code==='IDENTITY_CONFLICT');
+    assert.deepEqual(f.snapshot(),before);
+  } finally {f.sql.close();}
+});
+
+test('hard-admin graph exception requires same account name or phone and exact admin role', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[2], current=ids[3], name=getContractAdminNotificationNames().at(-1), x='U'+'1'.repeat(32);
+  for (const change of [{name:'不同姓名',phone:'0900000000'}, {name,role:'user'}, {name,role:'reward'}]) {
+    const f=fixture({mapper:storeInviteProfileView,tokens:{current,x}});
+    try {
+      f.user(current,{name,role:'admin',legacy_line_id:old,point_line_id:current,...change});
+      f.user(x,{name:'其他會員',role:'user',point_line_id:current});f.link(old,current);
+      assert.equal((await f.call('','current')).status,409);
+      assert.equal((await f.call('','x')).status,409);
+    } finally {f.sql.close();}
+  }
+});
+
+test('hard-admin direct UID without link can be confirmed but its unused group UID cannot borrow authority', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[2], current=ids[3], name=getContractAdminNotificationNames().at(-1), x='U'+'1'.repeat(32);
+  const f=fixture({mapper:storeInviteProfileView,tokens:{old,current,x}});
+  try {
+    f.user(current,{name,role:'admin'});f.user(x,{role:'user',point_line_id:current});
+    assert.equal((await f.call('','current')).status,200);
+    assert.notEqual((await f.call('','old')).status,200);
+    assert.equal((await f.call('','x')).status,409);
+    const auth=await authorizeStoreAdmin(new Request(PATH,{headers:{Authorization:'Bearer current'}}),f.env,f.roleMapper,f.fetcher);
+    assert.deepEqual(auth.identityProof,{mode:'exact_hard_admin',ids:[current],account_ids:[old,current],links:[]});
+  } finally {f.sql.close();}
+});
+
+test('hard-admin exception rejects a separate exact UID row, extra active link, and unavailable database', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[2], current=ids[3], name=getContractAdminNotificationNames().at(-1), x='U'+'1'.repeat(32);
+  for (const setup of [f=>f.user(old,{role:'user'}), f=>f.link(current,x)]) {
+    const f=fixture({mapper:storeInviteProfileView,tokens:{current}});
+    try { f.user(current,{name,role:'admin',legacy_line_id:old});f.user(x,{role:'user',point_line_id:current});f.link(old,current);setup(f);
+      assert.equal((await f.call('','current')).status,409);
+    } finally {f.sql.close();}
+  }
+  const f=fixture({mapper:storeInviteProfileView,failedResult:true,tokens:{current}});
+  try {assert.equal((await f.call('','current')).status,503);} finally {f.sql.close();}
+});
+
+test('hard-admin conflict fallback is not granted to paid AI onboarding or partner finance routes', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[2], current=ids[3], name=getContractAdminNotificationNames().at(-1), x='U'+'1'.repeat(32);
+  const f=fixture({mapper:storeInviteProfileView,tokens:{current}});
+  try {
+    f.user(current,{name,role:'admin',legacy_line_id:old,point_line_id:current});
+    f.user(x,{role:'user',point_line_id:current});f.link(old,current);
+    for(const [method,path] of [['POST','/v1/store-shop/admin/onboarding/analyze'],
+      ['GET','/v1/store-shop/admin/onboarding/cards'], ['POST','/v1/partner-contracts/deals/confirm'],
+      ['POST','/v1/partner-contracts/settlement/payments'], ['GET','/v1/partner-contracts/settlement'],
+      ['POST','/v1/store-shop/admin/stores'], ['GET','/v1/store-shop/admin/catalog/review']]) {
+      const req=new Request('https://worker.test'+path,{method,headers:{Authorization:'Bearer current'}});
+      await assert.rejects(()=>authorizeStoreAdmin(req,f.env,f.roleMapper,f.fetcher),e=>e.code==='IDENTITY_CONFLICT',method+' '+path);
+    }
+    for(const [method,path] of [['GET','/v1/store-shop/admin/catalog'],['POST','/v1/store-shop/admin/stores/pin'],
+      ['POST','/v1/reward-applications/review'],['POST','/v1/checkin-chat-dashboard/draft']]) {
+      const req=new Request('https://worker.test'+path,{method,headers:{Authorization:'Bearer current'}});
+      assert.equal((await authorizeStoreAdmin(req,f.env,f.roleMapper,f.fetcher)).identityProof.mode,'exact_hard_admin',method+' '+path);
+    }
+  } finally {f.sql.close();}
 });
 
 test('search matches shop name, category, address, shop phone and owner name literally', async () => {

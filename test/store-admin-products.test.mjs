@@ -7,6 +7,7 @@ import {storeInviteProfileView} from '../workerbackup.js';
 import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3),REWARD=uid(4);
+const ADMIN_OLD='U050397a077bef628b317b0bbedeb2187';
 const product=(extra={})=>({shop_id:id(1),shop_version:1,request_key:id(99),title:'商品',description:'介紹',image_url:'https://img.example.com/item.png',price_cents:12345,category:'食',status:'draft',redeem_type:'none',redeem_value:0,purchase_mode:'in_store',...extra});
 function fixture(){
   const sql=new DatabaseSync(':memory:');
@@ -14,10 +15,11 @@ function fixture(){
   for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0040_store_admin_product_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
   for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'redeem'],[REWARD,'reward']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'會員'+role);
   for(const [n,owner]of [[1,OWNER],[2,MEMBER],[3,REWARD],[4,uid(9)]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-19')").run(id(n),owner,'店家'+n);
-  let beforeBatch=null,failAudit=false;
+  let beforeBatch=null,beforeExternal=null,failAudit=false,externalCalls=0;
   const db={withSession(value){assert.equal(value,'first-primary');return this;},prepare(query){
     const statement=(args=[])=>({query,args,bind(...values){return statement(values);},async all(){
       if(failAudit&&query.startsWith('INSERT INTO store_admin_product_audit'))throw new Error('audit failed secret');
+      if(beforeExternal&&query.startsWith('SELECT 1 AS authorized FROM users a')){const fn=beforeExternal;beforeExternal=null;fn();}
       return {success:true,results:sql.prepare(query).all(...args)};
     }});return statement();
   },async batch(statements){
@@ -27,17 +29,18 @@ function fixture(){
     catch(error){sql.exec('ROLLBACK');throw error;}
   }};
   const env=listingTestEnv(sql,db);
-  const fetcher=listingTestFetch(async(url,options)=>{
+  const baseFetcher=listingTestFetch(async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');assert.equal(options.redirect,'manual');
     const value=options.headers.Authorization.slice(7);
     return /^U[0-9a-f]{32}$/.test(value)?Response.json({userId:value}):new Response('',{status:401});
   });
+  const fetcher=(url,options)=>{if(url!=='https://api.line.me/v2/profile')externalCalls++;return baseFetcher(url,options);};
   const call=async(data=null,actor=ADMIN,query='shop='+id(1),method=data?'POST':'GET')=>{
     const req=new Request('https://test.invalid/v1/store-shop/admin/products'+(method==='GET'?'?'+query:''),{method,headers:actor?{Authorization:'Bearer '+actor,'Content-Type':'application/json'}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})});
     const response=await handleStoreAdminProducts(req,env,storeInviteProfileView,fetcher);
     return {status:response.status,...await response.json()};
   };
-  return {sql,db,call,setBeforeBatch:fn=>{beforeBatch=fn;},failAudit:()=>{failAudit=true;},count:table=>sql.prepare('SELECT count(*) n FROM '+table).get().n,
+  return {sql,db,call,setBeforeBatch:fn=>{beforeBatch=fn;},setBeforeExternal:fn=>{beforeExternal=fn;},get externalCalls(){return externalCalls;},failAudit:()=>{failAudit=true;},count:table=>sql.prepare('SELECT count(*) n FROM '+table).get().n,
     identities:()=>JSON.stringify(sql.prepare('SELECT * FROM users ORDER BY row_id').all()),
     stores:()=>JSON.stringify(sql.prepare('SELECT * FROM store_shop_stores ORDER BY id').all())};
 }
@@ -62,6 +65,38 @@ test('verified administrator aliases work but conflicting identity rows fail clo
   assert.equal((await f.call(product(),alias)).status,200);assert.equal(f.sql.prepare('SELECT actor_uid FROM store_admin_product_audit').get().actor_uid,alias);
   f.sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(alias,alias,'user');
   assert.equal((await f.call(product({request_key:id(98)}),alias)).status,409);assert.equal(f.count('store_shop_products'),1);
+});
+test('hard admin creates a product with a direct UID proof; group changes before write fail closed',async t=>{
+ for(const scenario of ['valid','role','link','extra-link','group-row']){
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  if(scenario!=='valid')f.setBeforeBatch(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,REWARD);
+   if(scenario==='group-row')f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(ADMIN_OLD,ADMIN_OLD);
+  });
+  assert.equal((await f.call(product(),ADMIN)).status,scenario==='valid'?200:409,scenario);
+  assert.equal(f.count('store_shop_products'),scenario==='valid'?1:0,scenario);
+  assert.equal(f.count('store_admin_product_audit'),scenario==='valid'?1:0,scenario);
+ }
+});
+test('hard admin identity is checked before any outside product review',async t=>{
+ for(const scenario of ['role','link','database']){
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.setBeforeExternal(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
+   if(scenario==='database')throw Error('synthetic unavailable');
+  });
+  assert.equal((await f.call(product({status:'active'}),ADMIN)).status,scenario==='database'?503:409,scenario);
+  assert.equal(f.externalCalls,0,scenario);assert.equal(f.count('store_shop_products'),0,scenario);
+ }
 });
 test('unregistered, missing and arbitrary targets cannot receive products',async t=>{
   const f=fixture();t.after(()=>f.sql.close());

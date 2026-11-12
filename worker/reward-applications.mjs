@@ -1,5 +1,6 @@
 import {contractOrganization} from './contract-organization.mjs';
 import {authorizeStoreAdmin, DirectoryError} from './store-admin.mjs';
+import {exactHardAdminWriteGate} from './store-admin-identity-proof.mjs';
 import {readJson, ShopError} from './store-shop.mjs';
 import {discountTerms,discountOptions,discountConfirmations,normalizeDiscountApplication} from './discount-application-definition.mjs';
 import {readHandSignTemplate,normalizeHandSignApplication,handSignConfirmations,handSignTemplateGate} from './hand-sign-application-definition.mjs';
@@ -74,7 +75,9 @@ async function member(request,env,fetcher){
 const sha=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),x=>x.toString(16).padStart(2,'0')).join('');
 async function record(db,id){return db.prepare('SELECT a.*,r.decision,r.note,r.reviewed_at FROM reward_applications a LEFT JOIN reward_application_reviews r ON r.application_id=a.id WHERE a.id=?').bind(id).first();}
 function view(row){return {id:row.id,snapshot:JSON.parse(row.snapshot_json),content_sha256:row.content_sha256,signed_at:row.signed_at,status:row.decision||'pending',review_note:row.note||'',reviewed_at:row.reviewed_at||''};}
-function reviewIdentityGate(proof){
+function reviewIdentityGate(proof,uid,actor){
+ const exact=exactHardAdminWriteGate(proof,uid,actor);
+ if(exact)return exact;
  if(!Array.isArray(proof?.ids)||!proof.ids.length||proof.ids.length>8||!Array.isArray(proof.links)||proof.links.length>1)throw Error('Administrator identity proof unavailable');
  const ids="SELECT value FROM json_each(p.value,'$.ids')";
  const touches=`(l.old_line_id IN(${ids}) OR l.new_line_id IN(${ids}))`;
@@ -184,7 +187,7 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   if(data.decision==='rejected'&&!note)fail('審核不通過時，請填寫原因');
   if(!await record(db,data.id))fail('查無申請',404);
   const authFields=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
-  const identityGate=reviewIdentityGate(identityProof);
+  const identityGate=reviewIdentityGate(identityProof,uid,actor);
   const result=await db.prepare(`INSERT INTO reward_application_reviews(application_id,reviewer_uid,decision,note,reviewed_at)
     SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE ${authFields.map(k=>k+' IS ?').join(' AND ')}) AND ${identityGate.sql} ON CONFLICT(application_id) DO NOTHING`).bind(data.id,uid,data.decision,note,now,...authFields.map(k=>actor[k]??null),...identityGate.args).run();
   if(result.success===false)throw Error('review unavailable');
