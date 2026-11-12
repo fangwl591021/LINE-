@@ -1,4 +1,5 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
+import {exactHardAdminWriteGate,exactHardAdminBeforeExternal} from './store-admin-identity-proof.mjs';
 import {normalizeProduct,requireProductRedemption,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {RETAIL_ROLES,storePlanForRole,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
@@ -36,7 +37,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});
   if(!['GET','POST'].includes(request.method))return reply({success:false,error:'僅提供查詢及新增商品'},405);
   try{
-    const {uid,db,actor}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
+    const {uid,db,actor,identityProof}=await authorizeStoreAdmin(request,env,profileMapper,fetcher);
     let data;
     if(request.method==='GET'){
       if([...url.searchParams.keys()].some(key=>key!=='shop')||url.searchParams.getAll('shop').length!==1)fail('INVALID_QUERY','請選擇店家');
@@ -61,11 +62,13 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     requireProductRedemption(product,shop.owner_role);
     if(shop.version!==data.shop_version)fail('STORE_CHANGED','店家資料已變更，請返回列表重新確認',409);
     if(shop.product_limit!==null&&shop.product_count>=shop.product_limit)fail('PRODUCT_LIMIT','此店家已達商品件數上限',409);
+    if(!await exactHardAdminBeforeExternal(db,identityProof,uid,actor))fail('ADMIN_CHANGED','管理員身分已更新，請重新登入後重試',409);
     await requireListingReview({value:product,parent:shop,scope:'product:'+shop.id+':'+data.request_key,uid,env,fetcher});
     const id=crypto.randomUUID(),now=new Date().toISOString();
     // Recheck the exact authorized actor and target snapshot inside the atomic write.
     // Quota is evaluated by SQL, so simultaneous creates cannot bypass a one-product limit.
-    const gate=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR_FIELDS.map(field=>'a.'+field+' IS ?').join(' AND ')})
+    const exact=exactHardAdminWriteGate(identityProof,uid,actor);
+    const gate=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR_FIELDS.map(field=>'a.'+field+' IS ?').join(' AND ')}) ${exact?'AND '+exact.sql:''}
       AND EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid
         WHERE s.id=? AND s.owner_uid=? AND s.version=? AND s.status=? AND u.role IS ?
         AND ${productQuotaSql('u.role',"SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived'")})`;
@@ -73,7 +76,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
       db.prepare(`INSERT INTO store_shop_products(id,shop_id,${PRODUCT_FIELDS.join(',')},version,updated_at,request_key)
         SELECT ?,?,${PRODUCT_FIELDS.map(()=>'?').join(',')},1,?,? WHERE ${gate}
         ON CONFLICT(shop_id,request_key) DO NOTHING`).bind(id,shop.id,...PRODUCT_FIELDS.map(key=>product[key]),now,data.request_key,
-          ...ACTOR_FIELDS.map(key=>actor[key]??null),shop.id,shop.owner_uid,shop.version,shop.status,shop.owner_role),
+          ...ACTOR_FIELDS.map(key=>actor[key]??null),...(exact?.args||[]),shop.id,shop.owner_uid,shop.version,shop.status,shop.owner_role),
       db.prepare(`INSERT INTO store_admin_product_audit(product_id,shop_id,actor_uid,owner_uid,request_key,payload_json,created_at)
         SELECT id,shop_id,?,?,request_key,?,? FROM store_shop_products WHERE id=? AND shop_id=?`)
         .bind(uid,shop.owner_uid,payload,now,id,shop.id)

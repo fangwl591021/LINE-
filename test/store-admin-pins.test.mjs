@@ -9,7 +9,7 @@ const SHOP='00000001-1111-4111-8111-111111111111',PARTNER='00000002-1111-4111-81
 const KEY=n=>String(n).padStart(8,'0')+'-2222-4222-8222-222222222222';
 const data=(extra={})=>({source:'shop',id:SHOP,pinned:true,version:0,request_key:KEY(1),...extra});
 
-function fixture(t){
+function fixture(t,{hardGroup=null}={}){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT,phone TEXT,points INTEGER DEFAULT 0);
  CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
@@ -28,7 +28,9 @@ function fixture(t){
  },async batch(statements){if(beforeBatch)await beforeBatch();sql.exec('BEGIN');try{const result=[];for(const statement of statements)result.push(await statement.run());sql.exec('COMMIT');return result;}catch(error){sql.exec('ROLLBACK');throw error;}}};
  const env={ACTMASTER_DB:db,STORE_DIRECTORY_PINNING_ENABLED:'true'};
  const fetcher=async(_url,init)=>{const token=init.headers.Authorization.slice(7);const id={admin:ADMIN,member:MEMBER,alias:ALIAS}[token];return id?Response.json({userId:id}):new Response('',{status:401});};
- const call=async(body,token='admin',method='POST',query='')=>{const request=new Request('https://fixture.invalid/v1/store-shop/admin/stores/pin'+query,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(body)}:{})});const response=await handleStoreAdminPins(request,env,row=>({role:row.role}),fetcher);return {http:response.status,...(response.status===204?{}:await response.json())};};
+ const mapper=row=>({role:row.role});
+ if(hardGroup)mapper.exactHardAdminIdentity=(uid,row)=>!hardGroup.includes(uid)?(row?false:[]):!row?[...hardGroup]:(hardGroup.includes(row.line_id)&&row.role==='admin'&&row.name==='管理員'&&row.phone==='0911000000');
+ const call=async(body,token='admin',method='POST',query='')=>{const request=new Request('https://fixture.invalid/v1/store-shop/admin/stores/pin'+query,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(body)}:{})});const response=await handleStoreAdminPins(request,env,mapper,fetcher);return {http:response.status,...(response.status===204?{}:await response.json())};};
  const protectedState=()=>JSON.stringify(['users','store_shop_stores','point_redemption_partners','point_ledger','store_publication_order'].map(table=>sql.prepare('SELECT * FROM '+table).all()));
  const pins=()=>sql.prepare('SELECT source,entity_id,pinned,version FROM store_catalog_pins ORDER BY source,entity_id').all();
  const audits=()=>sql.prepare('SELECT * FROM store_catalog_pin_audit ORDER BY request_key').all();
@@ -71,4 +73,34 @@ test('failed audit rolls back pin update and the same request can safely retry',
  const f=fixture(t),before=f.protectedState();f.setFailAudit(true);
  assert.equal((await f.call(data())).http,503);assert.equal(f.audits().length,0);assert.equal(f.pins().length,0);assert.equal(f.protectedState(),before);
  f.setFailAudit(false);const result=await f.call(data());assert.equal(result.http,200);assert.equal(result.pin_version,1);assert.equal(f.audits().length,1);assert.equal(f.protectedState(),before);
+});
+
+test('hard admin can pin via a verified direct legacy link despite another user sharing the wallet',async t=>{
+ const f=fixture(t,{hardGroup:[ALIAS,ADMIN]});
+ f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ALIAS,ADMIN);
+ f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+ f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ALIAS,ADMIN);
+ assert.equal((await f.call(data(),'member')).http,409);
+ assert.equal((await f.call(data(),'alias')).http,200);
+ assert.equal(f.audits().length,1);
+});
+
+test('hard-admin pin rechecks the full trusted account group and actor immediately before writing',async t=>{
+ for(const scenario of ['role','missing-link','extra-link','other-group-row','no-link-other-row','no-link-other-link']){
+  const f=fixture(t,{hardGroup:[ALIAS,ADMIN]});
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
+  if(!scenario.startsWith('no-link')){
+   f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ALIAS,ADMIN);
+   f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ALIAS,ADMIN);
+  }
+  f.setBeforeBatch(()=>{
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='missing-link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ALIAS);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,MEMBER);
+   if(scenario==='other-group-row'||scenario==='no-link-other-row')f.sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(ALIAS,ALIAS,'user');
+   if(scenario==='no-link-other-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ALIAS,MEMBER);
+  });
+  const result=await f.call(data(),'admin');
+  assert.equal(result.http,409,scenario);assert.equal(f.audits().length,0,scenario);assert.equal(f.pins().length,0,scenario);
+ }
 });

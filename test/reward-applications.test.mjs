@@ -5,9 +5,12 @@ import {rewardFixture,ADMIN,REWARD,OTHER,mapper} from './fixtures/reward-unit-di
 import {handleRewardApplications,normalizeApplication,normalizeSigning,rewardTerms} from '../worker/reward-applications.mjs';
 export const fields=()=>({unit_name:'合成測試單位',applicant_name:'測試申請人',phone:'0912345678',line_contact:'',unit_types:['企業'],unit_types_other:'',recipients:['員工'],recipients_other:'',scenarios:['員工福利'],scenarios_other:''});
 export const signature=id=>({preview_id:id,strokes:[Array.from({length:15},(_,i)=>[100+i*30,100+(i%2)*90])],electronic:true,terms:true,authority:true});
-function fixture(t){const s=rewardFixture();t.after(()=>s.sql.close());s.sql.exec("ALTER TABLE users ADD COLUMN referrer_id TEXT DEFAULT '';"+readFileSync(new URL('../migrations/0068_reward_applications.sql',import.meta.url),'utf8'));
- const fetcher=async(url,opts)=>{assert.equal(url,'https://api.line.me/v2/profile');const uid={admin:ADMIN,reward:REWARD,user:OTHER}[opts.headers.Authorization.slice(7)];return uid?Response.json({userId:uid}):new Response('',{status:401});};
- s.call=async(path='',data,token='user')=>{const response=await handleRewardApplications(new Request('https://test/v1/reward-applications'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined}),s.env,mapper,fetcher);return {http:response.status,...await response.json()};};
+const ADMIN_OLD='U'+'d'.repeat(32);
+function fixture(t,{hardGroup=null}={}){const s=rewardFixture();t.after(()=>s.sql.close());s.sql.exec("ALTER TABLE users ADD COLUMN referrer_id TEXT DEFAULT '';"+readFileSync(new URL('../migrations/0068_reward_applications.sql',import.meta.url),'utf8'));
+ const fetcher=async(url,opts)=>{assert.equal(url,'https://api.line.me/v2/profile');const uid={admin:ADMIN,oldadmin:ADMIN_OLD,reward:REWARD,user:OTHER}[opts.headers.Authorization.slice(7)];return uid?Response.json({userId:uid}):new Response('',{status:401});};
+ const profileMapper=row=>mapper(row);
+ if(hardGroup)profileMapper.exactHardAdminIdentity=(uid,row)=>!hardGroup.includes(uid)?(row?false:[]):!row?[...hardGroup]:(hardGroup.includes(row.line_id)&&row.role==='admin'&&row.name==='管理員'&&row.phone==='PRIVATE_PHONE');
+ s.call=async(path='',data,token='user')=>{const response=await handleRewardApplications(new Request('https://test/v1/reward-applications'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined}),s.env,profileMapper,fetcher);return {http:response.status,...await response.json()};};
  return s;
 }
 const submit=async s=>{const preview=await s.call('/preview',{fields:fields()});assert.equal(preview.http,200,JSON.stringify(preview));const payload=signature(preview.preview_id);return {preview,payload,result:await s.call('/submit',payload)};};
@@ -47,6 +50,38 @@ test('review is admin-only, immutable, idempotent and never changes authority or
 test('admin authority changed between read and review write prevents review',async t=>{
  const s=fixture(t),{result}=await submit(s),original=s.db.prepare.bind(s.db);s.db.prepare=query=>{const st=original(query);if(!query.includes('INSERT INTO reward_application_reviews'))return st;const bind=st.bind.bind(st);st.bind=(...args)=>{const bound=bind(...args);const run=bound.run.bind(bound);bound.run=async()=>{s.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);return run();};return bound;};return st;};
  assert.equal((await s.call('/review',{id:result.application.id,decision:'accepted',note:'合成'},'admin')).http,409);assert.equal(s.sql.prepare('SELECT COUNT(*) n FROM reward_application_reviews').get().n,0);
+});
+
+test('verified hard-admin old UID can review despite an unrelated member sharing its wallet',async t=>{
+ const s=fixture(t,{hardGroup:[ADMIN_OLD,ADMIN]}),{result}=await submit(s);
+ s.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+ s.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,OTHER);
+ s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+ const before=s.sql.prepare('SELECT * FROM users').all();
+ assert.equal((await s.call('/review',{id:result.application.id,decision:'accepted',note:'合成'},'user')).http,409);
+ assert.equal((await s.call('/review',{id:result.application.id,decision:'accepted',note:'合成'},'oldadmin')).http,200);
+ assert.deepEqual(s.sql.prepare('SELECT * FROM users').all(),before);
+ assert.equal(s.sql.prepare('SELECT COUNT(*) n FROM reward_application_reviews').get().n,1);
+});
+
+test('hard-admin review rechecks all group IDs, links and actor at the write',async t=>{
+ for(const scenario of ['role','missing-link','extra-link','other-group-row','no-link-other-row','no-link-other-link']){
+  const s=fixture(t,{hardGroup:[ADMIN_OLD,ADMIN]}),{result}=await submit(s);
+  s.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,OTHER);
+  if(!scenario.startsWith('no-link')){
+   s.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
+   s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  }
+  const original=s.db.prepare.bind(s.db);s.db.prepare=query=>{const st=original(query);if(!query.includes('INSERT INTO reward_application_reviews'))return st;const bind=st.bind.bind(st);st.bind=(...args)=>{const bound=bind(...args),run=bound.run.bind(bound);bound.run=async()=>{
+   if(scenario==='role')s.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='missing-link')s.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
+   if(scenario==='extra-link')s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,OTHER);
+   if(scenario==='other-group-row'||scenario==='no-link-other-row')s.sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(ADMIN_OLD,ADMIN_OLD,'user');
+   if(scenario==='no-link-other-link')s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,OTHER);
+   return run();};return bound;};return st;};
+  assert.equal((await s.call('/review',{id:result.application.id,decision:'accepted',note:'合成'},'admin')).http,409,scenario);
+  assert.equal(s.sql.prepare('SELECT COUNT(*) n FROM reward_application_reviews').get().n,0,scenario);
+ }
 });
 test('malformed, unsupported and oversized requests fail without writes',async t=>{
  const s=fixture(t);assert.equal((await s.call('/preview',{fields:{...fields(),unit_name:'x'.repeat(100001)}})).http,413);assert.equal((await s.call('?id=x')).http,400);assert.equal((await s.call('?after=x')).http,400);assert.equal((await s.call('?id=a&id=b')).http,400);assert.equal((await s.call('/submit')).http,405);

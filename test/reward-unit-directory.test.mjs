@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {rewardFixture,proposal,ADMIN,REWARD,OTHER} from './fixtures/reward-unit-directory.mjs';
 import {listingCategories} from '../worker/store-listing-review.mjs';
+import {handleRewardUnits} from '../worker/reward-unit-directory.mjs';
+import {listingTestFetch} from './fixtures/store-listing-review.mjs';
 const f=t=>{const s=rewardFixture();t.after(()=>s.sql.close());return s;};
 test('CRM roles alone never publish units; public GET is bounded, no auth or private response',async t=>{
   const s=f(t);const before=s.sql.prepare('SELECT * FROM users').all();assert.deepEqual((await s.call()).units,[]);assert.equal(s.calls.length,0);
@@ -58,6 +60,51 @@ test('unchanged retry is idempotent; reused key and stale version cannot overwri
 });
 test('role/admin/CAS races during review prevent publication and audit writes',async t=>{
   for(const who of [REWARD,ADMIN]){const s=f(t);s.onBatch(()=>s.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(who));const r=await s.call('/admin',proposal(),'admin');assert.equal(r.http,409,JSON.stringify(r));assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_unit_publications').get().n,0);assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_unit_publication_audit').get().n,0);}
+});
+test('hard-admin unit publication rechecks the full UID group and direct link at the write',async t=>{
+ const old='U'+'d'.repeat(32),group=[old,ADMIN];
+ for(const scenario of ['valid','role','link','extra-link','group-row']){
+  const s=f(t);s.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(old,ADMIN);
+  s.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,OTHER);
+  s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(old,ADMIN);
+  const mapper=row=>({role:row.role});
+  mapper.exactHardAdminIdentity=(uid,row)=>!group.includes(uid)?(row?false:[]):!row?[...group]:(group.includes(row.line_id)&&row.role==='admin'&&row.name==='管理員'&&row.phone==='PRIVATE_PHONE');
+  const fetcher=listingTestFetch(async(url,opts)=>{if(url==='https://api.line.me/v2/profile')return Response.json({userId:opts.headers.Authorization.slice(7)});throw Error('Unexpected outbound request');});
+  if(scenario!=='valid')s.onBatch(()=>{
+   if(scenario==='role')s.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='link')s.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(old);
+   if(scenario==='extra-link')s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,OTHER);
+   if(scenario==='group-row')s.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(old,old);
+  });
+  const request=new Request('https://app.test/v1/reward-units/admin',{method:'POST',headers:{Authorization:'Bearer '+ADMIN,'Content-Type':'application/json'},body:JSON.stringify(proposal())});
+  const response=await handleRewardUnits(request,s.env,mapper,fetcher);
+  assert.equal(response.status,scenario==='valid'?200:409,scenario);
+  assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_unit_publications').get().n,scenario==='valid'?1:0,scenario);
+  assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_unit_publication_audit').get().n,scenario==='valid'?1:0,scenario);
+ }
+});
+test('hard-admin identity changes stop reward-unit review before external requests',async t=>{
+ const old='U'+'d'.repeat(32),group=[old,ADMIN];
+ for(const scenario of ['role','link','database']){
+  const s=f(t);s.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(old,ADMIN);
+  s.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,OTHER);
+  s.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(old,ADMIN);
+  const mapper=row=>({role:row.role});
+  mapper.exactHardAdminIdentity=(uid,row)=>!group.includes(uid)?(row?false:[]):!row?[...group]:(group.includes(row.line_id)&&row.role==='admin'&&row.name==='管理員'&&row.phone==='PRIVATE_PHONE');
+  const prepare=s.db.prepare.bind(s.db);s.db.prepare=query=>{
+   if(query.startsWith('SELECT 1 AS authorized FROM users a')){
+    if(scenario==='role')s.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+    if(scenario==='link')s.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(old);
+    if(scenario==='database')throw Error('synthetic unavailable');
+   }
+   return prepare(query);
+  };
+  const base=listingTestFetch(async(url,opts)=>{if(url==='https://api.line.me/v2/profile')return Response.json({userId:opts.headers.Authorization.slice(7)});throw Error('Unexpected outbound request');});
+  let externalCalls=0;const fetcher=(url,opts)=>{if(url!=='https://api.line.me/v2/profile')externalCalls++;return base(url,opts);};
+  const request=new Request('https://app.test/v1/reward-units/admin',{method:'POST',headers:{Authorization:'Bearer '+ADMIN,'Content-Type':'application/json'},body:JSON.stringify(proposal())});
+  assert.equal((await handleRewardUnits(request,s.env,mapper,fetcher)).status,scenario==='database'?503:409,scenario);
+  assert.equal(externalCalls,0,scenario);assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_unit_publications').get().n,0,scenario);
+ }
 });
 test('audit and publication are atomic on database failure',async t=>{
   const s=f(t);s.sql.exec("CREATE TRIGGER fail_publication BEFORE INSERT ON reward_unit_publications BEGIN SELECT RAISE(ABORT,'synthetic'); END");

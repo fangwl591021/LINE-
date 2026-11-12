@@ -2,6 +2,7 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {readJson,ShopError} from './store-shop.mjs';
 import {storePinningEnabled} from './store-pinning-state.mjs';
+import {exactHardAdminWriteGate} from './store-admin-identity-proof.mjs';
 const PATH='/v1/store-shop/admin/stores/pin';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FIELDS=['source','id','pinned','version','request_key'];
@@ -11,7 +12,9 @@ const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
 const fail=(code,message,status=400)=>{throw new DirectoryError(code,message,status);};
 async function rows(db,query,args=[]){const result=await db.prepare(query).bind(...args).all();if(result.success===false||!Array.isArray(result.results))throw Error('Pin read unavailable');return result.results;}
-function authority(actor,proof){
+function authority(actor,proof,uid){
+  const exact=exactHardAdminWriteGate(proof,uid,actor);
+  if(exact)return {sql:`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')}) AND ${exact.sql}`,args:[...ACTOR.map(key=>actor[key]??null),...exact.args]};
   const markers=proof.ids.map(()=>'?').join(','),userMatch=IDS.map(key=>`a.${key} IN (${markers})`).join(' OR ');
   let sql=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')}) AND (SELECT count(*) FROM users a WHERE ${userMatch})=1 AND (SELECT count(*) FROM user_identity_links WHERE status='active' AND (old_line_id IN (${markers}) OR new_line_id IN (${markers})))=?`;
   const args=[...ACTOR.map(key=>actor[key]??null),...IDS.flatMap(()=>proof.ids),...proof.ids,...proof.ids,proof.links.length];
@@ -41,7 +44,7 @@ export async function handleStoreAdminPins(request,env,profileMapper,fetcher=fet
     if(!(await rows(db,data.source==='shop'?'SELECT id FROM store_shop_stores WHERE id=?':'SELECT partner_handle FROM point_redemption_partners WHERE partner_handle=?',[entity])).length)fail('NOT_FOUND','查無此店家，請重新整理列表',404);
     const current=(await rows(db,'SELECT pinned,version FROM store_catalog_pins WHERE source=? AND entity_id=?',[data.source,entity]))[0];
     if((current?.version||0)!==data.version)fail('VERSION_CONFLICT','置頂設定已更新，請重新整理後再調整',409);
-    const guard=authority(actor,identityProof),now=new Date().toISOString();
+    const guard=authority(actor,identityProof,uid),now=new Date().toISOString();
     const result=await db.batch([
       db.prepare(`INSERT INTO store_catalog_pins(source,entity_id,pinned,version,updated_by,updated_at,request_key)
         SELECT ?,?,?,?,?,?,? WHERE ${guard.sql} AND ${target}

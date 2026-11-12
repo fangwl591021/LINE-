@@ -8718,6 +8718,19 @@ export function storeInviteProfileView(row) {
   return D1ReadModule.userRow(row, 'store_invite');
 }
 
+// Server-owned conflict proof limited to the user's specified existing account.
+// The verified UID and canonical line_id must belong to that same account;
+// no ID from a wallet, request field or name alone can grant this proof.
+storeInviteProfileView.exactHardAdminIdentity = (uid, row) => {
+  const account = SecurityModule.hardAdminAccounts.find(item => item.label === '楊滄棋' && item.ids.includes(String(uid || '')));
+  if (!account) return row ? false : [];
+  if (!row) return [...account.ids];
+  const name = SecurityModule.text(row.name), phone = SecurityModule.normalizePhone(row.phone);
+  return account.ids.includes(SecurityModule.text(row.line_id)) &&
+    SecurityModule.normalizeRole(row.role) === 'admin' &&
+    (account.names.some(allowed => name.includes(allowed)) || (!!phone && account.phones.includes(phone)));
+};
+
 export async function runAutomatedUploaderMatch(job, env) {
   const ownerUserId = String(job?.ownerUserId || '').trim();
   if (!ownerUserId || !env?.ACTMASTER_DB) return { success: false, error: 'CARD_OWNER_MISSING' };
