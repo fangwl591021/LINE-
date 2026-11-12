@@ -231,7 +231,7 @@
       content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入管理員店家列表…</p>';
       const sameSession=()=>canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&sameSession();
-      const module=await import('./store-admin.js?v=6&errors=1');
+      const module=await import('./store-admin.js?v=6');
       if(!current())return;
       await module.mountStoreAdmin(content,{api,isCurrent:current,onReviewDrafts:()=>run(()=>adminDrafts()),onManageCatalog:id=>run(()=>adminCatalog(id)),onUploadProducts:id=>run(()=>adminProducts(id)),onManagePartners:()=>window.goPage('admin-partners'),onBack:()=>run(()=>manage()),onView:async id=>{
         if(!current())return;

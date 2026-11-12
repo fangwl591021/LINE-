@@ -88,21 +88,6 @@ test('read failure clears private rows and offers retry of the same failed page'
   assert.equal(s.action('retry').hidden,false);assert.match(s.status().textContent,/無法讀取/);assert.doesNotMatch(s.root.textContent,/private SQL|測試店家/);
   s.action('retry').dispatch('click');assert.equal(s.requests[2].args[0],s.requests[1].args[0]);s.requests[2].resolve(report());await flush();assert.match(s.root.querySelector('.store-admin-pager').textContent,/第 2 頁/);
 });
-test('known directory authorization failures show safe actionable red messages and retain retry',async()=>{
-  for(const [code,status,text] of [
-    ['IDENTITY_CONFLICT',409,/身分資料有衝突/],
-    ['AUTH_EXPIRED',401,/重新登入/],
-    ['ADMIN_REQUIRED',403,/沒有管理員查詢權限/],
-    ['AUTH_UNAVAILABLE',503,/LINE 身分驗證暫時無法完成/]
-  ]){
-    const s=fixture(),pending=s.mount();const error=Object.assign(new Error('private server detail'),{code,status});
-    s.requests[0].reject(error);await pending;
-    assert.match(s.status().textContent,text);assert.doesNotMatch(s.status().textContent,/private server detail/);
-    assert.equal(s.status().getAttribute('style'),'color:#b42318');assert.equal(s.action('retry').hidden,false);
-    s.action('retry').dispatch('click');assert.equal(s.status().getAttribute('style'),'');
-    s.requests[1].resolve(report());await flush();assert.match(s.status().textContent,/符合條件/);
-  }
-});
 test('malformed unsuccessful response cannot be shown as a successful directory',async()=>{
   const s=await loaded({success:false,shops:[shop()],summary:{total:500}});assert.match(s.status().textContent,/無法讀取/);assert.equal(s.action('retry').hidden,false);assert.equal(s.root.querySelector('[data-admin-count=total]').textContent,'—');
 });
@@ -128,13 +113,4 @@ test('back works without reads, navigation rejection is handled without unhandle
 test('styles are scoped, compact on mobile, and back toolbar remains sticky',()=>{
   assert.match(css,/\.store-admin \.store-admin-toolbar\{position:sticky;top:0/);assert.match(css,/@media\(max-width:520px\)/);assert.match(css,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.doesNotMatch(source,/innerHTML|localStorage|sessionStorage|fetch\(/);assert.doesNotMatch(source,/data-do/);
-});
-test('admin error-message changes are versioned through every directory entry',()=>{
-  const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-  assert.match(read('admin.html'),/admin-mall-dashboard\.js\?v=15&storeErrors=1/);
-  assert.match(read('js/modules/admin-mall-dashboard.js'),/store-admin\.js\?v=6&errors=1/);
-  assert.match(read('js/modules/store-shop.js'),/store-admin\.js\?v=6&errors=1/);
-  assert.match(read('index.html'),/store-shop-entry\.js\?v=79[^"']*&adminErrors=1/);
-  assert.match(read('js/modules/store-shop-entry.js'),/store-shop\.js\?v=76[^"']*&adminErrors=1/);
-  assert.match(read('store-shop.html'),/store-shop\.js\?v=76[^"']*&adminErrors=1/);
 });

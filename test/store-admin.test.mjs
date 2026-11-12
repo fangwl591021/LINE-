@@ -251,6 +251,18 @@ test('hard-admin conflict fallback is not granted to paid AI onboarding or partn
   } finally {f.sql.close();}
 });
 
+test('conflict exception is limited to the specified existing hard-admin account', async () => {
+  const ids=getContractAdminNotificationIds(), old=ids[0], current=ids[1], name=getContractAdminNotificationNames()[0], x='U'+'1'.repeat(32);
+  const f=fixture({mapper:storeInviteProfileView,tokens:{old,current,x}});
+  try {
+    f.user(current,{name,role:'admin',legacy_line_id:old,point_line_id:current});f.link(old,current);
+    assert.equal((await f.call('','old')).status,200);
+    assert.equal((await f.call('','current')).status,200);
+    f.user(x,{role:'user',point_line_id:current});
+    for (const token of ['old','current','x']) assert.equal((await f.call('',token)).status,409,token);
+  } finally {f.sql.close();}
+});
+
 test('search matches shop name, category, address, shop phone and owner name literally', async () => {
   const f = fixture(); try {
     for (const q of ['茶飲', '食', '新北', '0900123', '店長乙']) {

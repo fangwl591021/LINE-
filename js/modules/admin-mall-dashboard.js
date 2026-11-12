@@ -17,7 +17,7 @@ async function loadAdminMall(){
     return result;
   };
   async function directory(){
-    const module=await import('./store-admin.js?v=6&errors=1');if(!current())return;
+    const module=await import('./store-admin.js?v=6');if(!current())return;
     await module.mountStoreAdmin(container,{api,isCurrent:current,onBack:()=>switchTab('partners'),onManagePartners:()=>switchTab('partners'),
       onUploadProducts:upload,onManageCatalog:catalog,onReviewDrafts:drafts,onView:id=>{
         if(!current())return;

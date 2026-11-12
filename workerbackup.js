@@ -8718,11 +8718,11 @@ export function storeInviteProfileView(row) {
   return D1ReadModule.userRow(row, 'store_invite');
 }
 
-// Server-owned identity proof for the conflict fallback. The verified UID and
-// canonical line_id must both belong to the same existing hard-admin account;
+// Server-owned conflict proof limited to the user's specified existing account.
+// The verified UID and canonical line_id must belong to that same account;
 // no ID from a wallet, request field or name alone can grant this proof.
 storeInviteProfileView.exactHardAdminIdentity = (uid, row) => {
-  const account = SecurityModule.hardAdminAccounts.find(item => item.ids.includes(String(uid || '')));
+  const account = SecurityModule.hardAdminAccounts.find(item => item.label === '楊滄棋' && item.ids.includes(String(uid || '')));
   if (!account) return row ? false : [];
   if (!row) return [...account.ids];
   const name = SecurityModule.text(row.name), phone = SecurityModule.normalizePhone(row.phone);

@@ -7,7 +7,7 @@ import {storeInviteProfileView} from '../workerbackup.js';
 import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3),REWARD=uid(4);
-const ADMIN_OLD='U050397a077bef628b317b0bbedeb2187';
+const YANG='Ue9a59cf9b2969ec78b6bfdc2a4cfca08',ADMIN_OLD='U58eb5c1a747450140ce1335af709ae55';
 const product=(extra={})=>({shop_id:id(1),shop_version:1,request_key:id(99),title:'商品',description:'介紹',image_url:'https://img.example.com/item.png',price_cents:12345,category:'食',status:'draft',redeem_type:'none',redeem_value:0,purchase_mode:'in_store',...extra});
 function fixture(){
   const sql=new DatabaseSync(':memory:');
@@ -69,16 +69,16 @@ test('verified administrator aliases work but conflicting identity rows fail clo
 test('hard admin creates a product with a direct UID proof; group changes before write fail closed',async t=>{
  for(const scenario of ['valid','role','link','extra-link','group-row']){
   const f=fixture();t.after(()=>f.sql.close());
-  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
-  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
-  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET row_id=?,line_id=?,name=?,legacy_line_id=? WHERE line_id=?').run(YANG,YANG,'楊滄棋',ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(YANG,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,YANG);
   if(scenario!=='valid')f.setBeforeBatch(()=>{
-   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(YANG);
    if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
-   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,REWARD);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(YANG,REWARD);
    if(scenario==='group-row')f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(ADMIN_OLD,ADMIN_OLD);
   });
-  assert.equal((await f.call(product(),ADMIN)).status,scenario==='valid'?200:409,scenario);
+  assert.equal((await f.call(product(),YANG)).status,scenario==='valid'?200:409,scenario);
   assert.equal(f.count('store_shop_products'),scenario==='valid'?1:0,scenario);
   assert.equal(f.count('store_admin_product_audit'),scenario==='valid'?1:0,scenario);
  }
@@ -86,15 +86,15 @@ test('hard admin creates a product with a direct UID proof; group changes before
 test('hard admin identity is checked before any outside product review',async t=>{
  for(const scenario of ['role','link','database']){
   const f=fixture();t.after(()=>f.sql.close());
-  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
-  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
-  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET row_id=?,line_id=?,name=?,legacy_line_id=? WHERE line_id=?').run(YANG,YANG,'楊滄棋',ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(YANG,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,YANG);
   f.setBeforeExternal(()=>{
-   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(YANG);
    if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
    if(scenario==='database')throw Error('synthetic unavailable');
   });
-  assert.equal((await f.call(product({status:'active'}),ADMIN)).status,scenario==='database'?503:409,scenario);
+  assert.equal((await f.call(product({status:'active'}),YANG)).status,scenario==='database'?503:409,scenario);
   assert.equal(f.externalCalls,0,scenario);assert.equal(f.count('store_shop_products'),0,scenario);
  }
 });

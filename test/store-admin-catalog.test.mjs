@@ -9,7 +9,7 @@ import worker from '../worker-entry.mjs';
 import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3);
-const ADMIN_OLD='U050397a077bef628b317b0bbedeb2187';
+const YANG='Ue9a59cf9b2969ec78b6bfdc2a4cfca08',ADMIN_OLD='U58eb5c1a747450140ce1335af709ae55';
 const payload=(extra={})=>({type:'product',id:id(10),shop_id:id(1),version:1,shop_version:1,request_key:id(99),changes:{title:'更新商品',status:'active'},...extra});
 test('global draft queue is read-only, paged across eligible shops and contains no member details',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
@@ -85,16 +85,16 @@ test('shared catalog write is visible in existing public/mobile API and leaves i
 test('hard admin catalog changes recheck trusted UID group and direct link at the write',async t=>{
  for(const scenario of ['valid','role','link','extra-link','group-row']){
   const f=fixture();t.after(()=>f.sql.close());
-  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
-  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
-  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET row_id=?,line_id=?,name=?,legacy_line_id=? WHERE line_id=?').run(YANG,YANG,'楊滄棋',ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(YANG,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,YANG);
   if(scenario!=='valid')f.before(()=>{
-   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(YANG);
    if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
-   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN,OWNER);
+   if(scenario==='extra-link')f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(YANG,OWNER);
    if(scenario==='group-row')f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(ADMIN_OLD,ADMIN_OLD);
   });
-  assert.equal((await f.call(payload(),ADMIN)).http,scenario==='valid'?200:409,scenario);
+  assert.equal((await f.call(payload(),YANG)).http,scenario==='valid'?200:409,scenario);
   assert.equal(f.audit().length,scenario==='valid'?1:0,scenario);
   assert.equal(f.product().title,scenario==='valid'?'更新商品':'原商品',scenario);
  }
@@ -102,16 +102,16 @@ test('hard admin catalog changes recheck trusted UID group and direct link at th
 test('catalog activation and review-only recheck hard-admin identity before external review',async t=>{
  for(const route of ['','/review'])for(const scenario of ['role','link','database']){
   const f=fixture();t.after(()=>f.sql.close());
-  f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(ADMIN_OLD,ADMIN);
-  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(ADMIN,MEMBER);
-  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET row_id=?,line_id=?,name=?,legacy_line_id=? WHERE line_id=?').run(YANG,YANG,'楊滄棋',ADMIN_OLD,ADMIN);
+  f.sql.prepare('UPDATE users SET point_line_id=? WHERE line_id=?').run(YANG,MEMBER);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(ADMIN_OLD,YANG);
   f.beforeExternal(()=>{
-   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(ADMIN);
+   if(scenario==='role')f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(YANG);
    if(scenario==='link')f.sql.prepare("UPDATE user_identity_links SET status='inactive' WHERE old_line_id=?").run(ADMIN_OLD);
    if(scenario==='database')throw Error('synthetic unavailable');
   });
   const data=route?payload({changes:{status:'active'}}):payload();
-  assert.equal((await f.call(data,ADMIN,'',route)).http,scenario==='database'?503:409,route+' '+scenario);
+  assert.equal((await f.call(data,YANG,'',route)).http,scenario==='database'?503:409,route+' '+scenario);
   assert.equal(f.externalCalls,0,route+' '+scenario);assert.equal(f.audit().length,0,route+' '+scenario);
  }
 });
