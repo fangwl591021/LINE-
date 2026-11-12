@@ -24,7 +24,11 @@ node tools/run-smoke-contracts.js --full
 
 ## Still Excluded
 
-None. All `tools/check-*-contract.js` scripts are now represented in the full smoke guard.
+The home ticker checks below are run independently; they were updated for the continuous ticker behavior on 2026-11-12 and are not currently part of the full guard:
+
+- `tools/check-system-ticker-live-card-count-contract.js`
+- `tools/check-ticker-live-stats-direct-contract.js`
+- `tools/check-ticker-readable-pace.js`
 
 ## Rule
 
