@@ -1830,49 +1830,16 @@ const HomeModule = (function() {
         }
     };
 
-    function waitHomeTicker_(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
+    let homeTickerController_ = null;
+    let homeTickerLoadVersion_ = 0;
 
-    async function animateHomeTickerMessage_(box, textEl, value, runToken) {
-        textEl.textContent = value;
-        textEl.style.animation = 'none';
-        textEl.style.opacity = '1';
-        textEl.style.willChange = 'transform, opacity';
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
-
-        const boxWidth = Math.max(1, box.clientWidth);
-        const textWidth = Math.max(1, textEl.scrollWidth);
-        const startX = boxWidth + 16;
-        const centerX = Math.round((boxWidth - textWidth) / 2);
-        const endX = -textWidth - 24;
-
-        const enter = textEl.animate([
-            { transform: `translateX(${startX}px)` },
-            { transform: `translateX(${centerX}px)` }
-        ], { duration: 8000, easing: 'linear', fill: 'forwards' });
-        await enter.finished.catch(() => {});
-        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
-
-        await waitHomeTicker_(950);
-        const flash = textEl.animate([
-            { opacity: 1, filter: 'brightness(1)' },
-            { opacity: 0.18, filter: 'brightness(1.8)' },
-            { opacity: 1, filter: 'brightness(1)' }
-        ], { duration: 520, easing: 'ease-in-out', fill: 'forwards' });
-        await flash.finished.catch(() => {});
-        await waitHomeTicker_(1050);
-        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
-
-        const exit = textEl.animate([
-            { transform: `translateX(${centerX}px)` },
-            { transform: `translateX(${endX}px)` }
-        ], { duration: 8000, easing: 'linear', fill: 'forwards' });
-        await exit.finished.catch(() => {});
-        textEl.textContent = '';
-        textEl.style.opacity = '0';
-        return window.__HOME_TICKER_RUN_TOKEN__ === runToken;
+    function stopHomeSystemTicker_() {
+        window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
+        if (!homeTickerController_) return;
+        homeTickerController_.observer?.disconnect();
+        window.removeEventListener('resize', homeTickerController_.onResize);
+        homeTickerController_.animation?.cancel();
+        homeTickerController_ = null;
     }
 
     window.startHomeSystemTicker = async function(messages) {
@@ -1880,25 +1847,70 @@ const HomeModule = (function() {
         const textEl = document.getElementById('home-system-ticker-text');
         if (!box || !textEl) return;
         const queue = (Array.isArray(messages) ? messages : []).map(v => String(v || '').trim()).filter(Boolean);
-        const runToken = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
-        window.__HOME_TICKER_RUN_TOKEN__ = runToken;
+        const text = queue.join('　 •　 ');
+        if (queue.length && homeTickerController_?.text === text && !box.classList.contains('hidden')) return;
+        stopHomeSystemTicker_();
+        const runToken = window.__HOME_TICKER_RUN_TOKEN__;
         if (!queue.length) {
+            textEl.replaceChildren();
+            textEl.removeAttribute('aria-label');
+            textEl.removeAttribute('role');
             box.classList.add('hidden');
             return;
         }
         box.classList.remove('hidden');
-        let index = 0;
-        while (window.__HOME_TICKER_RUN_TOKEN__ === runToken && queue.length) {
-            const keepGoing = await animateHomeTickerMessage_(box, textEl, queue[index % queue.length], runToken);
-            if (!keepGoing) break;
-            index += 1;
-            await waitHomeTicker_(1500);
+        textEl.style.animation = 'none';
+        textEl.style.opacity = '1';
+        textEl.style.transform = '';
+        textEl.setAttribute('role', 'marquee');
+        textEl.setAttribute('aria-label', text);
+        const track = document.createElement('span');
+        track.setAttribute('aria-hidden', 'true');
+        track.style.display = 'inline-flex';
+        track.style.width = 'max-content';
+        track.style.willChange = 'transform';
+        const segment = document.createElement('span');
+        segment.style.flex = '0 0 auto';
+        segment.style.paddingRight = '4rem';
+        segment.textContent = text;
+        track.append(segment);
+        textEl.replaceChildren(track);
+        const viewport = textEl.parentElement || box;
+        const controller = { text, animation: null, observer: null, onResize: null, lastSegment: 0 };
+        homeTickerController_ = controller;
+        const layout = () => {
+            if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return;
+            const viewportWidth = viewport.clientWidth;
+            const segmentWidth = segment.getBoundingClientRect().width;
+            if (!(viewportWidth > 0) || !(segmentWidth > 0)) return;
+            const count = Math.ceil(viewportWidth / segmentWidth) + 2;
+            while (track.children.length > count) track.lastElementChild.remove();
+            while (track.children.length < count) track.append(segment.cloneNode(true));
+            if (controller.animation && Math.abs(controller.lastSegment - segmentWidth) < 0.1) return;
+            const oldTime = Number(controller.animation?.currentTime) || 0;
+            const oldOffset = controller.lastSegment > 0 ? (oldTime * 45 / 1000) % controller.lastSegment : 0;
+            controller.animation?.cancel();
+            controller.lastSegment = segmentWidth;
+            controller.animation = track.animate([
+                { transform: 'translateX(0px)' },
+                { transform: `translateX(-${segmentWidth}px)` }
+            ], { duration: segmentWidth / 45 * 1000, iterations: Infinity, easing: 'linear' });
+            if (oldOffset) controller.animation.currentTime = (oldOffset % segmentWidth) / 45 * 1000;
+        };
+        controller.onResize = layout;
+        window.addEventListener('resize', layout);
+        if (typeof ResizeObserver === 'function') {
+            controller.observer = new ResizeObserver(layout);
+            controller.observer.observe(viewport);
+            controller.observer.observe(segment);
         }
+        layout();
     };
 
     window.loadHomeSystemTicker = async function() {
         const box = document.getElementById('home-system-ticker');
         if (!box) return;
+        const loadVersion = ++homeTickerLoadVersion_;
         try {
             const [tickerResult, liveResult] = await Promise.allSettled([
                 window.fetchAPI('getSystemTicker', {}, true),
@@ -1906,6 +1918,7 @@ const HomeModule = (function() {
             ]);
             const tickerRes = tickerResult.status === 'fulfilled' ? tickerResult.value : null;
             const liveRes = liveResult.status === 'fulfilled' ? liveResult.value : null;
+            if (loadVersion !== homeTickerLoadVersion_) return;
             const data = tickerRes?.data || tickerRes || {};
             const liveData = liveRes?.data || liveRes || {};
             const messages = [];
@@ -1923,14 +1936,13 @@ const HomeModule = (function() {
             }
 
             if (!messages.length) {
-                window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
-                box.classList.add('hidden');
+                await window.startHomeSystemTicker([]);
                 return;
             }
             window.startHomeSystemTicker(messages);
         } catch {
-            window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
-            box.classList.add('hidden');
+            if (loadVersion !== homeTickerLoadVersion_) return;
+            await window.startHomeSystemTicker([]);
         }
     };
     window.renderHomeAnnouncements = function(items) {

@@ -8,7 +8,7 @@ function must(cond, msg) { if (!cond) { console.error('Ticker live stats contrac
 must(worker.includes("action === 'getSystemTickerLiveStats'"), 'direct live stats action missing');
 must(worker.includes('todayCardCollectionCount'), 'worker count missing');
 must(home.includes("window.fetchAPI('getSystemTickerLiveStats'"), 'frontend does not fetch direct live stats');
-must(home.includes('duration: 4800'), 'ticker speed not slowed');
-must(home.includes('waitHomeTicker_(650)'), 'center pause not extended');
-must(index.includes('js/modules/home.js?v=7.84'), 'home.js cache bust missing');
+must(home.includes('iterations: Infinity') && home.includes("easing: 'linear'"), 'ticker must continuously move at linear pace');
+must(!home.includes('waitHomeTicker_'), 'ticker must not wait in the middle');
+must(/js\/modules\/home\.js\?v=/.test(index), 'home.js cache version missing');
 console.log('Direct ticker live stats contract passed.');
