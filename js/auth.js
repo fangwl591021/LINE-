@@ -2879,42 +2879,9 @@ window.ensureFriendReferralBeforeGate = async function(params, context = {}) {
     if (/^U[0-9a-f]{32}$/i.test(ref)) window.showToast?.('這是舊邀請連結；分享獎勵請使用新的個人分享連結。', true);
     return;
   }
-  const modal = document.getElementById('friend-referral-modal');
-  const message = document.getElementById('friend-referral-status');
-  const actions = document.getElementById('friend-referral-actions');
-  const retry = document.getElementById('friend-referral-retry');
-  const proceed = document.getElementById('friend-referral-proceed');
-  if (!modal || !message || !actions || !retry || !proceed) {
-    const result = await window.recordFriendReferralBeforeGate(params, context);
-    if (result.status !== 'recorded' && result.status !== 'skip') window.showToast?.('邀請紀錄尚未確認，分享獎勵可能無法成立。', true);
-    return result;
-  }
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-  try {
-    while (true) {
-      message.textContent = '正在確認邀請紀錄，請稍候…';
-      actions.classList.add('hidden');
-      const result = await window.recordFriendReferralBeforeGate(params, context);
-      if (result.status === 'recorded' || result.status === 'skip') return result;
-      message.textContent = result.reason === 'already_friend'
-        ? 'LINE 顯示您已是官方帳號好友，無法確認這次邀請贈點。您仍可繼續進入。'
-        : result.status === 'ineligible'
-          ? '無法確認本次邀請贈點，可能已有推薦紀錄或不符合資格。您仍可繼續進入。'
-          : '邀請紀錄尚未確認。您可以重試；若繼續，分享獎勵可能無法成立。';
-      actions.classList.remove('hidden');
-      const choice = await new Promise(resolve => {
-        retry.onclick = () => resolve('retry');
-        proceed.onclick = () => resolve('proceed');
-      });
-      retry.onclick = null;
-      proceed.onclick = null;
-      if (choice === 'proceed') return { status: 'unconfirmed' };
-    }
-  } finally {
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-  }
+  // Preserve the verified reservation before the friendship gate, but do not
+  // interrupt entry when an invitation is ineligible or temporarily unavailable.
+  return await window.recordFriendReferralBeforeGate(params, context);
 };
 
 window.reorderSettingsSections = function() {
