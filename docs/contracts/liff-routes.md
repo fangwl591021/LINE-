@@ -174,9 +174,9 @@
 ### 個人好友邀請 challenge
 
 - 個人邀請的 QR、複製及分享使用伺服器驗證分享者後簽發的連結。Worker 驗票後產生限時 `friend_referral_challenge`，導向既有 LIFF；活動、商城及名片分享各維持原路由。舊裸 `ref` 仍可進站和沿用既有歸因，但不作新分享贈點證據，提示使用新版個人分享連結。
-- 登入後、好友引導前以 LINE token 與 challenge 請伺服器驗證；只接受伺服器從 challenge 確認的推薦人及網絡。失敗顯示重試或繼續，繼續時說明分享獎勵可能無法成立；不以 `point_friend` 當作好友證明。
+- 登入後、好友引導前以 LINE token 與 challenge 請伺服器驗證；只接受伺服器從 challenge 確認的推薦人及網絡。驗證失敗或逾時直接繼續進入，不再顯示邀請確認彈窗，也不採信未驗證的推薦參數；不以 `point_friend` 當作好友證明。此次無法確認時，分享獎勵可能無法成立。
 - 驗簽 follow 事件與登入可能先後抵達；事件 inbox 在 migration 0086 建立，依伺服器簽發的 challenge 時間及事件核對。先加好友但 webhook 尚未到達、LINE 缺少可確認事件、歷史資料不足或儲存故障時，不能宣稱已完成獎勵。現有 reply owner、會員與點數去重規則不變。
-- 本契約描述程式預期，正式啟用仍須完成 D1 migration、部署及 LINE 裝置驗證；本機模擬的 OAuth state 不能證明 LINE 實機必定保留參數。
+- D1 migration 與邀請流程已發布；本機模擬的 OAuth state 不能證明 LINE 實機必定保留參數，真人 LINE 裝置與實際獎勵入帳仍須分別驗證。
 
 ### `net`
 

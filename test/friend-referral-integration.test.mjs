@@ -60,27 +60,80 @@ test('signed invite issuance rejects a changed actor, changed token or foreign l
   await assert.rejects(ctx.createSignedFriendInvite(), /資料有誤/);
 });
 
-test('failed reservation waits for retry or explicit continuation before the friend prompt', async () => {
-  let calls = 0;
-  const app = frontend(async () => {
-    calls++;
-    if (calls === 1) throw Error('offline');
-    return { ok: true, json: async () => ({ success: true, reserved: true, referrerId: ref, networkId: 'trusted-network' }) };
-  });
-  const elements = new Map();
-  for (const id of ['friend-referral-modal', 'friend-referral-status', 'friend-referral-actions', 'friend-referral-retry', 'friend-referral-proceed']) {
-    elements.set(id, { textContent: '', classList: { add() {}, remove() {} } });
+test('valid and ineligible invitations finish without showing or waiting on a dialog', async () => {
+  const cases = [
+    [{ success: true, reserved: true, referrerId: ref, networkId: 'trusted-network' }, 'recorded'],
+    [{ success: true, reserved: false, reason: 'already_friend', referrerId: ref, networkId: 'not-trusted' }, 'ineligible'],
+    [{ success: true, reserved: false, reason: 'ineligible_or_recorded', referrerId: ref, networkId: 'not-trusted' }, 'ineligible'],
+    [{ success: true, reserved: true, referrerId: 'invalid', networkId: 'not-trusted' }, 'ineligible'],
+    [{ success: true, reserved: true, referrerId: ref, networkId: '' }, 'ineligible']
+  ];
+  for (const [payload, expected] of cases) {
+    let calls = 0, dialogReads = 0, toasts = 0;
+    const app = frontend(async () => { calls++; return { ok: true, json: async () => payload }; });
+    app.document = { getElementById: () => { dialogReads++; throw Error('invitation dialog should not be opened'); } };
+    app.showToast = () => { toasts++; };
+    const result = await app.ensureFriendReferralBeforeGate(new URLSearchParams({ ref, friend_referral_challenge: challenge }));
+    assert.equal(result.status, expected);
+    assert.equal(calls, 1);
+    assert.equal(dialogReads, 0);
+    assert.equal(toasts, 0);
+    if (expected === 'recorded') {
+      assert.equal(result.referrerId, ref);
+      assert.equal(result.networkId, 'trusted-network');
+    } else {
+      assert.equal(result.referrerId, undefined);
+      assert.equal(result.networkId, undefined);
+    }
   }
-  app.document = { getElementById: id => elements.get(id) };
-  let finished = false;
-  const pending = app.ensureFriendReferralBeforeGate(new URLSearchParams({ friend_referral_challenge: challenge })).then(() => { finished = true; });
-  for (let i = 0; i < 10; i++) await Promise.resolve();
-  assert.equal(finished, false);
-  assert.match(elements.get('friend-referral-status').textContent, /尚未確認/);
-  elements.get('friend-referral-retry').onclick();
-  await pending;
-  assert.equal(calls, 2);
-  assert.equal(finished, true);
+});
+
+test('network failure, HTTP error and timeout allow entry without a dialog or unverified referral', async () => {
+  const cases = [
+    async () => { throw Error('offline'); },
+    async () => ({ ok: false }),
+    async () => ({ ok: true, json: async () => { throw Error('bad JSON'); } }),
+    (_url, init) => new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(Error('timeout'))))
+  ];
+  for (const [index, fetcher] of cases.entries()) {
+    let dialogReads = 0, toasts = 0;
+    const app = frontend(fetcher);
+    app.document = { getElementById: () => { dialogReads++; throw Error('invitation dialog should not be opened'); } };
+    app.showToast = () => { toasts++; };
+    if (index === 3) {
+      app.setTimeout = (callback, ms) => { assert.equal(ms, 12000); queueMicrotask(callback); return 1; };
+      app.clearTimeout = () => {};
+    }
+    const result = await app.ensureFriendReferralBeforeGate(new URLSearchParams({ ref, net: 'url-network', friend_referral_challenge: challenge }));
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.referrerId, undefined);
+    assert.equal(result.networkId, undefined);
+    assert.equal(dialogReads, 0);
+    assert.equal(toasts, 0);
+  }
+});
+
+test('homepage no longer contains the invitation confirmation dialog', () => {
+  const index = read('../index.html');
+  assert.doesNotMatch(index, /id=["']friend-referral-modal["']/);
+  assert.doesNotMatch(index, /id=["']friend-referral-retry["']/);
+  assert.doesNotMatch(index, /id=["']friend-referral-proceed["']/);
+});
+
+test('a reservation result is ignored when LINE actor or access token changes in flight', async () => {
+  for (const changed of ['actor', 'token', 'logout']) {
+    let resolve;
+    const app = frontend(() => new Promise(done => { resolve = done; }));
+    const pending = app.ensureFriendReferralBeforeGate(new URLSearchParams({ friend_referral_challenge: challenge }));
+    if (changed === 'actor') app.currentUserProfile = { userId: 'U' + 'c'.repeat(32) };
+    if (changed === 'token') app.liff.getAccessToken = () => 'other-token';
+    if (changed === 'logout') app.liff.isLoggedIn = () => false;
+    resolve({ ok: true, json: async () => ({ success: true, reserved: true, referrerId: ref, networkId: 'trusted-network' }) });
+    const result = await pending;
+    assert.equal(result.status, 'unavailable', changed);
+    assert.equal(result.referrerId, undefined, changed);
+    assert.equal(result.networkId, undefined, changed);
+  }
 });
 
 test('reservation route handles preflight and rejects malformed data before touching the database', async () => {

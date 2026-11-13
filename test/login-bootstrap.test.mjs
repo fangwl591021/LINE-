@@ -169,6 +169,56 @@ test('personal referral is attempted after login and before the friendship promp
   assert.equal(f.calls.find(call => call[0] === 'referral-reserve')[1], 'signed-challenge');
 });
 
+test('the real silent invitation check completes before the friend prompt without a dialog', async () => {
+  const f = fixture({ query: '?ref=' + otherActor + '&friend_referral_challenge=signed-challenge' });
+  const pending = deferred();
+  const c = f.context;
+  c.fetch = (url, init) => { f.calls.push(['referral-reserve', url, init]); return pending.promise; };
+  c.writeFirstReferral = (...args) => f.calls.push(['referral-write', ...args]);
+  const originalGet = c.document.getElementById;
+  c.document.getElementById = id => {
+    assert.notEqual(id, 'friend-referral-modal', 'the invitation check must not open a dialog');
+    return originalGet(id);
+  };
+  vm.runInContext(block(authSource, 'window.recordFriendReferralBeforeGate =', 'window.reorderSettingsSections ='), c);
+  installAuth(f, { friendshipPromise: Promise.resolve({ friendFlag: false }) });
+  const ready = f.domReady();
+  await settle();
+  assert(f.calls.some(call => call[0] === 'referral-reserve'));
+  assert(!f.calls.some(call => call[0] === 'request-friendship'), 'friend prompt must wait for the signed reservation attempt');
+  pending.resolve({ ok: true, json: async () => ({ success: true, reserved: true, referrerId: otherActor, networkId: 'server-network' }) });
+  await ready;
+  const names = f.calls.map(call => call[0]);
+  assert(names.indexOf('referral-reserve') < names.indexOf('request-friendship'));
+  assert(f.calls.some(call => call[0] === 'referral-write' && call[2] === otherActor && call[3] === 'server-network'));
+});
+
+test('ineligible or failed signed invitation never saves the unverified URL attribution', async () => {
+  for (const failure of ['ineligible', 'offline']) {
+    const f = fixture({ query: '?ref=' + otherActor + '&net=url-network&friend_referral_challenge=signed-challenge' });
+    const c = f.context;
+    c.fetch = async () => {
+      f.calls.push(['referral-reserve']);
+      if (failure === 'offline') throw Error('offline');
+      return { ok: true, json: async () => ({ success: true, reserved: false, reason: 'ineligible_or_recorded', referrerId: otherActor, networkId: 'url-network' }) };
+    };
+    c.writeFirstReferral = (...args) => f.calls.push(['referral-write', ...args]);
+    const originalGet = c.document.getElementById;
+    c.document.getElementById = id => {
+      assert.notEqual(id, 'friend-referral-modal', 'the invitation check must not open a dialog');
+      return originalGet(id);
+    };
+    vm.runInContext(block(authSource, 'window.recordFriendReferralBeforeGate =', 'window.reorderSettingsSections ='), c);
+    installAuth(f);
+    await f.domReady();
+    assert(f.calls.some(call => call[0] === 'referral-reserve'), failure);
+    assert(f.calls.some(call => call[0] === 'session'), failure + ' still enters');
+    assert(!f.calls.some(call => call[0] === 'referral-write'), failure + ' must not save the URL referrer');
+    assert.equal(c.verifiedFriendReferralContext.referrerId, '', failure);
+    assert.equal(c.verifiedFriendReferralContext.networkId, 'admin', failure);
+  }
+});
+
 test('plain home and plain OAuth callbacks prewarm exactly one captured wrapper', async () => {
   for (const query of ['', '?code=fixture-code&state=opaque-state', '?liffClientId=fixture&liffRedirectUri=https%3A%2F%2Fexample.invalid%2FLINE-%2F&friendship_status_changed=true']) {
     const init = deferred();
