@@ -15,7 +15,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality-gate:
+    name: Required pre-deployment quality gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run full existing contract guard
+        run: npm run guard:after
+      - name: Run existing isolated store tests
+        run: npm run test:store-shop
+      - name: Run wallet and history regressions
+        run: node --test test/store-wallet-summary.test.mjs test/store-history-popup.test.mjs
   deploy:
+    needs: quality-gate
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -35,3 +52,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
