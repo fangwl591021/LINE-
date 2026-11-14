@@ -1,4 +1,39 @@
 /* Admin-only view over the existing mobile activity/registrant APIs. */
+// The overview is a read-only activity/registration summary, loaded only when
+// its tab is opened. Do not call the obsolete getAdminStats action.
+(() => {
+  let pending;
+  window.loadFinanceStats = async () => {
+    const tab = document.getElementById('tab-finance');
+    if (!tab) return;
+    try {
+      pending ||= import('./admin-finance-overview.mjs?v=1').catch(error => { pending = null; throw error; });
+      const overview = await pending;
+      await overview.load({
+        workerUrl: WORKER_URL,
+        session: () => ({
+          role: typeof adminRole === 'undefined' ? '' : adminRole,
+          uid: typeof adminProfile === 'undefined' ? '' : adminProfile?.userId || '',
+          token: window.liff?.isLoggedIn?.() ? window.liff.getAccessToken?.() || '' : ''
+        })
+      });
+    } catch {
+      for (const id of ['stat-users','stat-cards','stat-acts','stat-regs']) {
+        const node = document.getElementById(id);
+        if (node && !node.hidden) node.textContent = '—';
+      }
+      let status = document.getElementById('finance-overview-loader-error');
+      if (!status) {
+        status = document.createElement('div');
+        status.id = 'finance-overview-loader-error';
+        status.setAttribute('role', 'status');
+        status.className = 'text-red-700 font-bold';
+        tab.prepend(status);
+      }
+      status.textContent = '統計功能載入失敗，請重新整理頁面後再試。';
+    }
+  };
+})();
 (function () {
   'use strict';
   const state = { mounted: false, listRequest: 0, rosterRequest: 0, selected: '', rows: null, busy: false, counts: new Map() };
