@@ -30,7 +30,7 @@ test('the home palette keeps its readable controls and the empty-switch line box
   assert.match(rule('#home-profile-card .home-top-shortcut'), /height:\s*108px;/);
   assert.match(rule('#home-primary-shortcuts .home-quick-circle'), /min-height:\s*76px;/);
   assert.doesNotMatch(css, /#home-top-nav-switch[^{}]*\{[^}]*display:\s*none/);
-  assert.match(html, /home-reference-theme\.css\?v=2/);
+  assert.match(html, /home-reference-theme\.css\?v=3/);
 });
 
 test('full-width home overrides the shared frame without changing the opt-in V2 or image crop', () => {

@@ -135,6 +135,37 @@
     if (p.homeValue) p.homeValue.textContent = '首頁';
   }
 
+  // This slot is shared with the card/customer banner. Only the member home
+  // uses it for the owner's point QR; other pages keep their existing actions.
+  function setHomeWalletShortcut(isHomePage, isCardSection) {
+    const p = getBannerParts();
+    if (!p) return;
+    p.checkin.classList.toggle('home-wallet-shortcut', isHomePage);
+    if (isCardSection) {
+      if (p.checkin.getAttribute('data-home-wallet-mode') === 'wallet' && p.checkinValue)
+        p.checkinValue.textContent = '每日 10 點';
+      p.checkin.removeAttribute('data-home-wallet-mode');
+      return;
+    }
+    if (isHomePage) {
+      p.checkin.setAttribute('data-home-wallet-mode', 'wallet');
+      p.checkin.setAttribute('onclick', 'window.openHomeMemberQr()');
+      p.checkin.setAttribute('aria-label', '出示我的點數 QR，供累積或折抵');
+      if (p.checkinIcon) p.checkinIcon.textContent = 'qr_code_2';
+      if (p.checkinLabel) p.checkinLabel.textContent = '我的 QR';
+      if (p.checkinValue) p.checkinValue.textContent = '（累積／折抵）';
+      showValue(p.checkinValue);
+    } else if (p.checkin.getAttribute('data-home-wallet-mode') === 'wallet') {
+      p.checkin.removeAttribute('data-home-wallet-mode');
+      p.checkin.setAttribute('onclick', 'window.claimDailyPointCheckin(this)');
+      p.checkin.removeAttribute('aria-label');
+      if (p.checkinIcon) p.checkinIcon.textContent = 'redeem';
+      if (p.checkinLabel) p.checkinLabel.textContent = '簽到贈點';
+      if (p.checkinValue) p.checkinValue.textContent = '每日 10 點';
+      showValue(p.checkinValue);
+    }
+  }
+
   function isCardSectionPage(page) {
     return page === 'card' || page === 'customers';
   }
@@ -149,6 +180,7 @@
     const homeActive = page === 'home' || (!!homePage && !homePage.classList.contains('hidden'));
     setCardSectionBanner(cardActive);
     setHomeShareShortcut(homeActive);
+    setHomeWalletShortcut(homeActive && !cardActive, cardActive);
   }
 
   function install() {
@@ -164,6 +196,7 @@
       const result = originalGoPage.call(this, page, ...args);
       setCardSectionBanner(isCardSectionPage(page));
       setHomeShareShortcut(page === 'home');
+      setHomeWalletShortcut(page === 'home', isCardSectionPage(page));
       return result;
     };
     syncFromVisiblePage();
