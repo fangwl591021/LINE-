@@ -17,7 +17,10 @@ const endedRightsSql=`(NOT (${protectedRight}) AND EXISTS(SELECT 1 FROM partner_
  JOIN partner_contract_enrollments e ON e.id=l.contract_id
  WHERE e.member_uid=b.beneficiary_id AND e.policy_version='${VERSION}'
  AND l.verified_at<=? AND l.effective_at<=? AND c.confirmed_at<=l.effective_at))`;
-const candidateSql=`SELECT b.tx_id,b.order_id,b.bonus_type,b.amount,b.status,b.raw_json,b.created_at AS award_created_at,c.confirmed_at
+const candidateSql=`SELECT b.tx_id,b.order_id,b.bonus_type,b.amount,b.status,b.raw_json,b.created_at AS award_created_at,c.confirmed_at,
+ s.policy_version AS order_policy_version,o.order_type,
+ json_extract(c.facts_json,'$.performanceReportingDate.month') AS reporting_month,
+ EXISTS(SELECT 1 FROM bonus_transactions other WHERE other.order_id=b.order_id AND CASE WHEN json_valid(other.raw_json) THEN coalesce(json_extract(other.raw_json,'$.beneficiaryPolicyVersion'),'') ELSE '' END!='${VERSION}') AS has_other_policy
  FROM bonus_transactions b JOIN orders o ON o.order_id=b.order_id
  JOIN partner_bonus_order_snapshots s ON s.order_id=b.order_id
  JOIN partner_bonus_deal_confirmations c ON c.order_id=b.order_id
@@ -76,8 +79,9 @@ export async function handlePartnerSettlement11510(route,input,c){
   if(!/^20\d\d-(0[1-9]|1[0-2])$/.test(data.month||'')||data.month>=localDay(at).slice(0,7))c.fail('僅可對已結束月份建立對帳單');
   const delivered=past(c,data.deliveredAt,at),evidenceRef=c.text(data.evidenceRef),due=statementDeadline11510(data.month);
   if(localDay(delivered).slice(0,7)<=data.month)c.fail('對帳單送達日須在業績月份結束後');
-  const candidates=await c.all(c.db,candidateSql+" AND strftime('%Y-%m',c.confirmed_at,'+8 hours')=? ORDER BY b.tx_id LIMIT 11",data.target_uid,VERSION,at,at,data.month),rows=candidates.slice(0,MAX_ITEMS);
+  const candidates=await c.all(c.db,candidateSql+" AND coalesce(json_extract(c.facts_json,'$.performanceReportingDate.month'),strftime('%Y-%m',c.confirmed_at,'+8 hours'))=? ORDER BY b.tx_id LIMIT 11",data.target_uid,VERSION,at,at,data.month),rows=candidates.slice(0,MAX_ITEMS);
   if(!rows.length)c.fail('該月沒有尚未列帳的有效115.10獎金',409);
+  if(rows.some(r=>r.reporting_month))c.fail('業績歸屬日期可能影響成交先後與獎金受領人，請先核對，未建立對帳單',409);
   if(rows.some(x=>!Number.isFinite(x.amount)||x.amount<=0))c.fail('獎金金額需先核對',409);
   if(rows.some(x=>{const created=Date.parse(x.award_created_at.includes('T')?x.award_created_at:x.award_created_at.replace(' ','T')+'Z');return !Number.isFinite(created)||created>Date.parse(delivered);}))c.fail('送達時間不可早於本次獎金成立時間；補充對帳單須以實際補送時間登錄',409);
   await awardChecks(c,data.target_uid,rows,at);

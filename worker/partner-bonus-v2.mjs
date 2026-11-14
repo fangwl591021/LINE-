@@ -17,6 +17,22 @@ const stamp=()=>new Date().toISOString();
 const dbFor=env=>env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB;
 const all=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results;
 const first=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
+// This is an administrative reporting period, not evidence of payment,
+// service, contract effectiveness, or transaction chronology.
+export async function readPerformanceReportingDate(db,orderId){
+ const table=await first(db,"SELECT 1 FROM sqlite_master WHERE type='table' AND name='partner_bonus_performance_date_events'");
+ if(!table)return null;
+ const event=await first(db,'SELECT event_id,version,precision,value,recorded_at,recorded_by FROM partner_bonus_performance_date_events WHERE order_id=? ORDER BY version DESC LIMIT 1',orderId);
+ if(!event)return null;
+ if(event.precision==='none'&&event.value==='')return {eventId:event.event_id,version:event.version,precision:'none',value:'',recordedAt:event.recorded_at,recordedBy:event.recorded_by};
+ const match=typeof event.value==='string'&&event.value.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?$/);
+ const validPrecision=match&&((event.precision==='month'&&!match[3])||(event.precision==='day'&&match[3]&&!match[4])||(event.precision==='minute'&&match[3]&&match[4]));
+ if(!validPrecision)fail('業績歸屬日期資料不完整，請先核對',409);
+ const [,year,month,day='01',hour='00',minute='00']=match;
+ const d=new Date(Date.UTC(+year,+month-1,+day,+hour,+minute));
+ if(d.getUTCFullYear()!==+year||d.getUTCMonth()!==+month-1||d.getUTCDate()!==+day||d.getUTCHours()!==+hour||d.getUTCMinutes()!==+minute)fail('業績歸屬日期資料不正確，請先核對',409);
+ return {eventId:event.event_id,version:event.version,precision:event.precision,value:event.value,month:year+'-'+month,recordedAt:event.recorded_at,recordedBy:event.recorded_by};
+}
 const keys=(v,allowed)=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!allowed.includes(k)))fail('資料欄位不正確');};
 function text(v,max=500,required=true){if(typeof v!=='string'||v.length>max||/[\x00-\x1f]/.test(v)||required&&!v.trim())fail('請填寫正確且完整的資料');return v.trim();}
 function date(v){const s=text(v,40);const n=Date.parse(s);if(!Number.isFinite(n)||!/^\d{4}-\d{2}-\d{2}T/.test(s))fail('日期時間不正確');return new Date(n).toISOString();}
@@ -371,6 +387,9 @@ async function confirmDeal(db,uid,actor,data){
    if(prior)fail('此商家已有有效首年度成交，請核對續約／重複訂單',409);
   }
   const at=stamp(),facts=await buildFacts(db,snapshot,row,at),plan=calculatePartnerBonusV2(facts);
+  const reportingDate=await readPerformanceReportingDate(db,row.order_id);
+  if(reportingDate?.precision==='none')facts.performanceReportingDateWithdrawal=reportingDate;
+  else if(reportingDate)fail('此制度的調整月份尚待核對，暫不確認獎金',409);
   if(plan.status==='review_required')return {success:false,error:'必要事實尚待核對，未產生獎金',code:'PARTNER_FACTS_REQUIRED',reviewReasons:plan.warnings,plan};
   const key=request.requestKey,nonce=crypto.randomUUID(),next=c.revision+1,confirmedId=row.order_id;
   const parties=[...new Set([row.buyer_id,snapshot.recruiter_uid,...plan.transactions.map(t=>t.memberId)])],markers=parties.map(()=>'?').join(',');
@@ -395,7 +414,7 @@ async function confirmDeal(db,uid,actor,data){
  fail('成交正在由其他管理員確認，請重新載入',409);
 }
 export function partnerContractContext11510(db,uid='',actor=null){
- const ctx={db,uid,actor,all,first,fail,keys,text,date,evidence,stamp,clock,clockClaim,gate,member,policyIdentity,buildFacts,calculateV2:calculatePartnerBonusV2,currentAttribution,activeAny:activeContract,activeContract};
+ const ctx={db,uid,actor,all,first,fail,keys,text,date,evidence,stamp,clock,clockClaim,gate,member,policyIdentity,buildFacts,readPerformanceReportingDate,calculateV2:calculatePartnerBonusV2,currentAttribution,activeAny:activeContract,activeContract};
  ctx.policy11510=createPartnerPolicy11510(ctx);ctx.awardEligibility=ctx.policy11510.awardEligibility;return ctx;
 }
 async function authorizeOrderReviewAdmin(request,env,profileMapper,fetcher){

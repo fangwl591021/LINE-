@@ -1,4 +1,23 @@
 /* Admin-only view over the existing mobile activity/registrant APIs. */
+// Add the independently authorised business-date editor to the bonus list.
+// The original order, payment and bonus actions keep their existing handlers.
+(() => {
+  if (typeof document === 'undefined') return;
+  let pending;
+  const open = () => {
+    pending ||= import('./admin-bonus-performance-date.mjs?v=1').then(module => module.mount({
+      workerUrl: WORKER_URL,
+      session: () => ({
+        role: typeof adminRole === 'undefined' ? '' : adminRole,
+        uid: typeof adminProfile === 'undefined' ? '' : adminProfile?.userId || '',
+        token: window.liff?.isLoggedIn?.() ? window.liff.getAccessToken?.() || '' : ''
+      })
+    })).catch(() => { pending = null; window.showToast?.('業績日期功能載入失敗，請重新開啟獎金制度', true); });
+  };
+  document.getElementById('nav-bonus')?.addEventListener?.('click', open);
+  const tab = document.getElementById('tab-bonus');
+  if (tab?.classList?.contains && !tab.classList.contains('hidden')) open();
+})();
 // The overview is a read-only activity/registration summary, loaded only when
 // its tab is opened. Do not call the obsolete getAdminStats action.
 (() => {
