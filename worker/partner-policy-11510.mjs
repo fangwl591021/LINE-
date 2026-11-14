@@ -43,7 +43,7 @@ export function calculatePartnerBonus11510(facts,legacyCalculator){
 
 // The authenticated router supplies the same primary D1 session and CAS fence as v2.
 export function createPartnerPolicy11510(ctx){
- const {db,uid,actor,all,first,fail,keys,text,date,evidence,stamp,clock,clockClaim,gate,member,policyIdentity,buildFacts,calculateV2,currentAttribution}=ctx;
+ const {db,uid,actor,all,first,fail,keys,text,date,evidence,stamp,clock,clockClaim,gate,member,policyIdentity,buildFacts,readPerformanceReportingDate,calculateV2,currentAttribution}=ctx;
  const events=id=>all(db,'SELECT * FROM partner_contract_lifecycle_events WHERE contract_id=? ORDER BY effective_at,verified_at,id',id);
  async function state(contract,at=stamp()){return contract11510State(contract,await events(contract.id),at);}
  async function latest(memberUid,at=stamp()){
@@ -171,6 +171,9 @@ export function createPartnerPolicy11510(ctx){
    if(request.serviceAdmission==='new'&&await first(db,"SELECT 1 FROM orders WHERE buyer_id=? AND order_type='tenant_annual_fee' AND order_id!=? AND (payment_status='paid' OR EXISTS(SELECT 1 FROM partner_bonus_deal_confirmations c WHERE c.order_id=orders.order_id)) LIMIT 1",row.buyer_id,row.order_id))fail('此商家已有付費歷史，不可列為年度新約',409);
    if(request.serviceAdmission==='reactivation'&&!await first(db,"SELECT 1 FROM orders WHERE buyer_id=? AND order_type='tenant_annual_fee' AND order_id!=? AND (payment_status='paid' OR EXISTS(SELECT 1 FROM partner_bonus_deal_confirmations c WHERE c.order_id=orders.order_id)) LIMIT 1",row.buyer_id,row.order_id))fail('未查得停止前服務紀錄，請核對重新加入類別',409);
    const at=stamp(),facts=row.order_type==='tenant_renewal_fee'?await renewalFacts(snapshot,row,at):await buildFacts(db,snapshot,row,at),plan=calculatePartnerBonus11510(facts,calculateV2);
+   const reportingDate=await readPerformanceReportingDate(db,row.order_id);
+   if(reportingDate?.precision==='none')facts.performanceReportingDateWithdrawal=reportingDate;
+   else if(reportingDate)fail('業績歸屬日期可能影響成交先後與獎金受領人，請先核對，未確認獎金',409);
    plan.policyType=snapshot.policy_version;
    for(const tx of plan.transactions){
     if(!tx.beneficiaryPolicyVersion)tx.beneficiaryPolicyVersion=(await latest(tx.memberId,snapshot.captured_at))?.policy_version||PARTNER_POLICY_11510;
