@@ -10,6 +10,7 @@ import { handleStoreShop } from './worker/store-shop.mjs';
 import { handleStoreCommerce } from './worker/store-commerce.mjs';
 import { handleStoreInviteBinding } from './worker/store-invite-binding.mjs';
 import { handleStoreAdmin } from './worker/store-admin.mjs';
+import { handleAdminOverviewStats } from './worker/admin-overview-stats.mjs';
 import { handleStoreAdminPins } from './worker/store-admin-pins.mjs';
 import { handleStoreAdminProducts } from './worker/store-admin-products.mjs';
 import { handleStoreAdminCatalog } from './worker/store-admin-catalog.mjs';
@@ -454,6 +455,8 @@ export default {
     if (islandVideoResponse) return islandVideoResponse;
     const islandEntryResponse = await handleIslandEntry(request, env);
     if (islandEntryResponse) return islandEntryResponse;
+    const adminOverviewStatsResponse = await handleAdminOverviewStats(request, env, storeInviteProfileView);
+    if (adminOverviewStatsResponse) return adminOverviewStatsResponse;
     const partnerContractResponse = await handlePartnerContracts(request, env, storeInviteProfileView);
     if (partnerContractResponse) return partnerContractResponse;
     const applicationResponse = await handleRewardApplications(request, env, storeInviteProfileView);
