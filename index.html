@@ -49,7 +49,7 @@
 
   <link rel="stylesheet" href="css/styles.css?v=7.6">
   <link rel="stylesheet" href="css/exchange-zone.css?v=4">
-  <link rel="stylesheet" href="css/home-reference-theme.css?v=2">
+  <link rel="stylesheet" href="css/home-reference-theme.css?v=3">
   <link rel="stylesheet" href="css/points-wallet-qr.css?v=1">
   <link rel="stylesheet" href="css/daily-tank.css?v=2">
   <link rel="stylesheet" href="css/card-links.css?v=1">
@@ -271,7 +271,7 @@
   </style>
 <link rel="stylesheet" href="css/contract-organization.css?v=3">
 <script src="js/modules/contract-organization.js?v=3" defer></script>
-<link rel="stylesheet" href="css/home-discovery-20261110.css?v=3">
+<link rel="stylesheet" href="css/home-discovery-20261110.css?v=4">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -2715,7 +2715,7 @@
   <nav id="home-discovery-bottom" aria-label="首頁導覽">
     <button type="button" onclick="window.goPage('home')" aria-current="page"><span class="material-symbols-outlined">home</span><small>首頁</small></button>
     <button type="button" onclick="window.openHomeShopCategory('')"><span class="material-symbols-outlined">storefront</span><small>探索好店</small></button>
-    <button type="button" class="home-bottom-scan" onclick="window.openHomePointAction()"><span class="material-symbols-outlined">qr_code_scanner</span><small>點數 QR／掃碼</small></button>
+    <button id="home-bottom-checkin" type="button" class="home-bottom-checkin" onclick="window.claimDailyPointCheckin(this)" aria-label="每日簽到贈點"><span class="home-bottom-checkin-badge"><span class="material-symbols-outlined" aria-hidden="true">redeem</span><span class="home-quick-label">簽到贈點</span><small>每日 10 點</small></span></button>
     <button type="button" onclick="window.openStoreShop('', '', '', 'point-history')"><span class="material-symbols-outlined">receipt_long</span><small>我的點數</small></button>
     <button type="button" onclick="window.goPage('admin-settings')"><span class="material-symbols-outlined">person</span><small>我的</small></button>
   </nav>
@@ -3009,7 +3009,7 @@
     <script src="js/modules/member-event-dm.js?v=2"></script>
 <script src="js/modules/member-hosted-events.js?v=8"></script>
 <script src="js/modules/home.js?v=8.27&invite=2&ticker=1"></script>
-<script src="js/modules/home-discovery-20261110.js?v=1"></script>
+<script src="js/modules/home-discovery-20261110.js?v=2"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
 <script src="js/modules/customers.js?v=1.2"></script>
@@ -3029,6 +3029,6 @@
   <script src="js/modules/safe-cashier.js?v=2"></script>
   <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=2&invitePrompt=0"></script>
 
-    <script src="js/modules/card-page-banner-shortcuts.js?v=1.3&order=2"></script>
+    <script src="js/modules/card-page-banner-shortcuts.js?v=1.4&order=2"></script>
 </body>
 </html>
