@@ -52,7 +52,7 @@ test('already checked, login required, and failures do not break the bottom cont
  await f.window.claimDailyPointCheckin(f.button);
  assert.equal(f.button.disabled,false);assert.equal(f.button.innerHTML,f.original);assert.match(f.status.textContent,/暫時無法連線/);
  await f.window.claimDailyPointCheckin(f.button);
- assert.equal(attempts,2);assert.match(f.status.textContent,/今天已領取過贈點/);assert.equal(f.button.innerHTML,f.original);
+ assert.equal(attempts,2);assert.match(f.status.textContent,/今天已領取過簽到購物金/);assert.equal(f.button.innerHTML,f.original);
  let called=false;const anon=fixture(async()=>{called=true;},false);
  await anon.window.claimDailyPointCheckin(anon.button);
  assert.equal(called,false);assert.match(anon.events[0][0],/請先登入/);

@@ -1522,7 +1522,7 @@ window.renderPointBalanceState = function(status, data = {}) {
 
   const badge = document.getElementById('point-balance-badge');
   if (badge) {
-    badge.textContent = isReady ? `${Number(balance).toLocaleString('zh-TW')} 點` : text;
+    badge.textContent = isReady ? `${Number(balance).toLocaleString('zh-TW')} 購物金` : text;
     badge.classList.remove('hidden');
     badge.classList.toggle('text-red-600', resolvedStatus === 'error');
     badge.classList.toggle('text-emerald-700', resolvedStatus !== 'error');
@@ -1613,21 +1613,21 @@ window.loadPointsWallet = async function(force = false) {
   if (force) window.pointWalletData = null;
   window.setPointWalletStatus('loading');
   window.renderPointBalanceState('loading');
-  listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>';
+  listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入購物金紀錄中...</div>';
 
   const data = await window.fetchPointWalletData_(force);
   if (qrOwner === window.currentUserProfile?.userId) window.renderPointsWalletQr?.(data, qrOwner);
   if (!data) {
     window.setPointWalletStatus('error', { error: 'Point wallet unavailable' });
     window.renderPointBalanceState('error');
-    listEl.innerHTML = '<div class="py-10 text-center text-red-400 text-sm font-bold">暫時無法取得點數紀錄</div>';
+    listEl.innerHTML = '<div class="py-10 text-center text-red-400 text-sm font-bold">暫時無法取得購物金紀錄</div>';
     return;
   }
 
   window.renderPointBalanceState('ready', data);
   const rows = (Array.isArray(data.list) ? data.list : []).slice(0, 30);
   if (!rows.length) {
-    listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">目前沒有點數異動紀錄</div>';
+    listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">目前沒有購物金異動紀錄</div>';
     return;
   }
 
@@ -1636,7 +1636,7 @@ window.loadPointsWallet = async function(force = false) {
     return String(value || '').replace('T', ' ').slice(0, 16);
   };
   const getAmount = (row) => Number(row.get_point ?? row.point ?? row.amount ?? row.points ?? 0) || 0;
-  const getTitle = (row) => String(row.event_name || row.eventName || row.title || row.name || '點數異動').trim();
+  const getTitle = (row) => String(row.event_name || row.eventName || row.title || row.name || '購物金異動').trim();
   const getTime = (row) => row.created_at || row.createdAt || row.time || row.date || '';
   const getSourceDetail = (row) => {
     const content = String(row.event_content || row.eventContent || row.content || '').trim();
@@ -2628,10 +2628,10 @@ window.claimDailyPointCheckin = async function(btn) {
     const data = res && (res.data || res);
     const awardedPoints = Number(data?.points || data?.awardedPoints || data?.changedPoints || 10);
     const message = data?.alreadyChecked
-      ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede'
-      : `簽到成功，\u5df2\u8d08\u9001 ${Number.isFinite(awardedPoints) ? awardedPoints : 10} \u9ede`;
+      ? '今天已領取過簽到購物金'
+      : `簽到成功，已獲得 ${Number.isFinite(awardedPoints) ? awardedPoints : 10} 購物金`;
     keepDisabled = false;
-    if (statusEl) statusEl.textContent = data?.alreadyChecked ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede\u3002' : message;
+    if (statusEl) statusEl.textContent = data?.alreadyChecked ? '今天已領取過簽到購物金。' : message;
     if (typeof window.showPointAwardCelebration === 'function' && data?.awarded) window.showPointAwardCelebration(Number.isFinite(awardedPoints) ? awardedPoints : 10, 'daily-checkin');
     else window.showToast?.(message, false);
     window.pointWalletData = null;

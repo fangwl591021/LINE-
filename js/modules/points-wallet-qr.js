@@ -9,7 +9,7 @@
     if (!control) return;
     control.disabled = true;
     control.replaceChildren();
-    control.textContent = data ? '產生 QR 碼中…' : '點數載入後顯示 QR 碼';
+    control.textContent = data ? '產生 QR 碼中…' : '購物金載入後顯示 QR 碼';
     dialog()?.close();
     document.getElementById('points-wallet-qr-large')?.replaceChildren();
     const uid = String(data?.queriedLineUserId || '').trim();
@@ -27,7 +27,7 @@
       const svg = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
       control.innerHTML = svg;
       const label = document.createElement('span');
-      label.textContent = '點數 QR・點擊放大';
+      label.textContent = '購物金 QR・點擊放大';
       control.append(label);
       control.disabled = false;
       control.onclick = () => {

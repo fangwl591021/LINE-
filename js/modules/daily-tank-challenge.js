@@ -33,7 +33,7 @@ async function api(action,payload={}) {
 }
 function taskState(data) {
   if(!task)return;
-  $('daily-tank-status').textContent=data.message||'遊戲館每日共領 100 點';
+  $('daily-tank-status').textContent=String(data.message||'遊戲館每日共領 100 購物金').replace(/(\d[\d,]*)\s*點/g,'$1 購物金').replace(/贈點/g,'贈送購物金');
   $('daily-tank-start').textContent=playing?'挑戰中':data.state==='completed'?'今日已完成':'開始挑戰';
   $('daily-tank-start').disabled=playing||data.state==='completed';
   $('daily-tank-practice').hidden=data.state!=='completed';
@@ -151,7 +151,7 @@ function loop(time) {
         if(session?.nonce){save({sessionId:session.sessionId,gameId:'tank_defense',nonce:session.nonce,date:session.date,replay});void confirmReward();}
         failHandler?.(tankResult());
       }
-      taskState({message:game.state==='won'?'破關成功，正在確認獎勵':'可重新挑戰，首次破關才會贈點'});
+      taskState({message:game.state==='won'?'破關成功，正在確認獎勵':'可重新挑戰，首次破關才會贈送購物金'});
     }
   }
   draw();if(playing)frame=requestAnimationFrame(loop);

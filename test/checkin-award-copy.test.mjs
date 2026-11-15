@@ -46,7 +46,7 @@ test('daily check-in uses its own success copy and keeps the existing action and
   const f = fixture(success);
   await f.context.window.claimDailyPointCheckin(f.button);
   assert.equal(f.popups.length, 1);
-  assert.match(f.popups[0].innerHTML, /簽到成功，獲得 10 點/);
+  assert.match(f.popups[0].innerHTML, /簽到成功，獲得 10 購物金/);
   assert.match(f.popups[0].innerHTML, /每日簽到獎勵/);
   assert.doesNotMatch(f.popups[0].innerHTML, /名片/);
   assert.deepEqual(JSON.parse(JSON.stringify(f.requests)), [['dailyPointCheckin', {
@@ -59,14 +59,14 @@ test('daily check-in uses its own success copy and keeps the existing action and
 test('check-in popup displays the returned reward, not a fixed ten points', async () => {
   const f = fixture({ success: true, data: { awarded: true, points: 20 } });
   await f.context.window.claimDailyPointCheckin(null);
-  assert.match(f.popups[0].innerHTML, /簽到成功，獲得 20 點/);
+  assert.match(f.popups[0].innerHTML, /簽到成功，獲得 20 購物金/);
 });
 
 test('already claimed does not show another success popup', async () => {
   const f = fixture({ success: true, data: { awarded: false, alreadyChecked: true, points: 0 } });
   await f.context.window.claimDailyPointCheckin(f.button);
   assert.equal(f.popups.length, 0);
-  assert.match(f.toasts[0][0], /今天已領取過贈點/);
+  assert.match(f.toasts[0][0], /今天已領取過簽到購物金/);
   assert.equal(f.button.disabled, false);
 });
 
@@ -83,13 +83,13 @@ test('toast fallback also names check-in success', async () => {
   const f = fixture(success, { popupAvailable: false });
   await f.context.window.claimDailyPointCheckin(null);
   assert.equal(f.popups.length, 0);
-  assert.match(f.toasts[0][0], /簽到成功，已贈送 10 點/);
+  assert.match(f.toasts[0][0], /簽到成功，已獲得 10 購物金/);
 });
 
-test('existing card reward callers keep their original copy', () => {
+test('card rewards keep their distinct success message with shopping credit terminology', () => {
   const f = fixture(success);
   f.context.showPointAwardCelebration(10);
-  assert.match(f.popups[0].innerHTML, /恭喜獲得 10 點/);
+  assert.match(f.popups[0].innerHTML, /恭喜獲得 10 購物金/);
   assert.match(f.popups[0].innerHTML, /新增不重複名片成功/);
   assert.doesNotMatch(f.popups[0].innerHTML, /簽到/);
 });

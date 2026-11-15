@@ -397,7 +397,7 @@ async function queryCurrentPointBalance() {
   const balance = Number(data && data.balance);
   if (!Number.isFinite(balance)) return null;
   if (badge) {
-    badge.textContent = balance.toLocaleString('zh-TW') + ' \u9ede';
+    badge.textContent = balance.toLocaleString('zh-TW') + ' 購物金';
     badge.classList.remove('hidden');
   }
   return balance;
@@ -433,7 +433,7 @@ function showPointAwardCelebration(points, source = 'card') {
       <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
         <span class="material-symbols-outlined text-[34px]">redeem</span>
       </div>
-      <div class="text-[24px] font-black text-slate-900">${(isDailyCheckin ? '簽到成功，獲得 ' : '\u606d\u559c\u7372\u5f97 ') + amount + ' \u9ede'}</div>
+      <div class="text-[24px] font-black text-slate-900">${(isDailyCheckin ? '簽到成功，獲得 ' : '\u606d\u559c\u7372\u5f97 ') + amount + ' 購物金'}</div>
       <div class="mt-2 text-[14px] font-bold leading-6 text-slate-500">${isDailyCheckin ? '每日簽到獎勵' : '\u65b0\u589e\u4e0d\u91cd\u8907\u540d\u7247\u6210\u529f'}</div>
       <button id="point-award-close" type="button" class="mt-5 w-full rounded-2xl bg-emerald-600 py-3 text-[16px] font-black text-white shadow-lg active:scale-[0.98] transition-transform">
         ${'\u592a\u597d\u4e86'}
