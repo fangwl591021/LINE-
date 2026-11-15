@@ -74,7 +74,7 @@
     return '';
   }
   function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='', applicationReview=null,initialCategory='') {
-    let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
+    let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='',managedShops=[],selectedManagementShop='';
     const initialProductSession=initialPublicProductId?{owner:window.currentUserProfile?.userId,role:window.userRole,token:window.liff?.getAccessToken?.()}:null;
     // New visit, new shuffle. Keep it for category/search/pagination in this mount.
     const discoverySeed=Array.from(crypto.getRandomValues(new Uint32Array(2)),n=>n.toString(16).padStart(8,'0')).join('');
@@ -93,6 +93,8 @@
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
       shop=result.shop;items=result.products;productLimit=result.product_limit;productCount=result.product_count;productNext=result.product_next||'';cooperationPlan=result.cooperation_plan||result.shop?.cooperation_plan;
+      if(Array.isArray(result.managed_shops))managedShops=result.managed_shops;
+      if(shop?.id)selectedManagementShop=shop.id;
     }
     function moreButton(next,privateView) {
       return next?`<button type="button" data-do="more-products" data-private="${privateView}" data-cursor="${esc(next)}">載入更多商品</button>`:'';
@@ -296,7 +298,10 @@
       }
       if(data) headers['Content-Type']='application/json';
       const reviewing=data&&['/store','/product','/admin/catalog','/admin/products'].includes(path);
-      const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:path==='/polish-intro'?30000:15000)});
+      const scoped=selectedManagementShop&&/^\/(?:manage|store|product|product-ocr)(?:\?|$)/.test(path);
+      const salesScope=selectedManagementShop&&/^\/sales(?:\?|$)/.test(path);
+      const target=path+(scoped?(path.includes('?')?'&':'?')+'shop='+encodeURIComponent(selectedManagementShop):salesScope?(path.includes('?')?'&':'?')+'managed_shop='+encodeURIComponent(selectedManagementShop):'');
+      const response=await fetch(`${base}/v1/store-shop${target}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:path==='/polish-intro'?30000:15000)});
       const result=await response.json();
       if(!response.ok||!result.success){const error=new Error(result.error||'商城操作失敗');error.code=result.code;error.status=response.status;error.review=result.review;throw error;}
       return result;
@@ -566,6 +571,7 @@
         if(shop)existingStoreImport(form);else applyStoreCard(form,card,unavailable);
       }
       addProductTags();
+      if(managedShops.length>1)content.insertAdjacentHTML('afterbegin',`<label>管理店家<select data-manage-shop>${managedShops.map(s=>`<option value="${esc(s.id)}" ${s.id===shop?.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`);
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
       if(shop&&canTransact()) {
@@ -628,7 +634,7 @@
         if(!readinessPending||readinessPending.token!==token||readinessPending.version!==version) {
           const pending={token,version};readinessPending=pending;
           pending.promise=(async()=>{
-            const response=await fetch(`${base}/v1/store-commerce/settings`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(10000)});
+            const response=await fetch(`${base}/v1/store-commerce/settings${shop?.id?'?shop='+encodeURIComponent(shop.id):''}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(10000)});
             const result=await response.json();
             if(!response.ok||!result.success||!result.settings)throw new Error('Settings unavailable');
             return checkoutWarning(result);
@@ -754,7 +760,7 @@
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
             const productId=button.dataset.productId||'';
-            let selected={};
+            let selected=mode==='merchant'?{shop}:{};
             if(mode==='checkout'){
               if(productId){
                 const result=await api('/products?id='+encodeURIComponent(productId)),p=result.products?.[0];
@@ -764,7 +770,7 @@
                 selected={shop:p.shop,products:[{...p,status:'active'}]};
               }else selected=viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`);
             }
-            const module=await import('./store-commerce.js?v=9');
+            const module=await import('./store-commerce.js?v=10');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,selectedProductId:productId,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }
@@ -825,6 +831,7 @@
     let productUpload = null;
     root.onchange=event=>{
       const picker=event.target;
+      if(picker.matches('[data-manage-shop]')){if(!managedShops.some(s=>s.id===picker.value))return;selectedManagementShop=picker.value;void run(()=>manage());return;}
       if(picker.matches('[data-explore-sort]')){exploreSort=picker.value==='name'?'name':'recommended';paintExplore();return;}
       if(picker.closest('[data-form="product-search"]')&&['purchase_mode','redeem'].includes(picker.name)){void run(()=>discover(discoveryValues()));return;}
       if(picker.closest('[data-form="product"]')&&['purchase_mode','status'].includes(picker.name)){void checkOnlineWarnings();return;}

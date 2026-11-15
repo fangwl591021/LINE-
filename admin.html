@@ -2633,6 +2633,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
                   <div class="text-[11px] font-bold text-slate-400 shrink-0">${formatDisplayTime(thread.last_event_at || thread.updated_at)}</div>
                 </div>
                 <div class="text-xs font-bold text-slate-400 truncate mt-0.5">${escapeHTML(thread.user_id || '')}</div>
+                ${thread.canonical_user_id ? `<div class="text-xs font-bold text-emerald-700 mt-1">已歸戶：${escapeHTML(thread.canonical_member_name || '現行會員')}（保留原 LINE 對話）</div>` : ''}
                 <div class="text-sm text-slate-600 truncate mt-2">${preview}</div>
                 <div class="flex items-center gap-2 mt-2">
                   <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-black">${monitorNumber(thread.message_count)} 則</span>
