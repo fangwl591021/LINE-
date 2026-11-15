@@ -516,6 +516,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">summarize</span>
             獎金報表
           </a>
+          <a href="#" onclick="switchTab('commission-ledger'); return false" id="nav-commission-ledger" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">account_balance</span>
+            傭金匯款總帳
+          </a>
           <a href="#" onclick="switchTab('checkin-chat-dashboard'); return false" id="nav-checkin-chat-dashboard" aria-label="聊天室儀表板" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">view_carousel</span>聊天室儀表板
           </a>
@@ -1036,6 +1040,34 @@
           <p class="text-xs text-slate-500 mt-2">時間顯示為台北時間；結算時間不一定是實際付款時間。匯出所有符合條件的資料，匯出期間若資料變動可能需要重新匯出。CSV 請在 Excel 使用「從文字／CSV」匯入並將會員編號欄設為文字，以保留完整編號。</p>
           <div class="overflow-x-auto mt-4"><table class="w-full min-w-[760px] text-sm text-left"><thead id="bonus-report-head" class="text-slate-500 bg-slate-50"></thead><tbody id="bonus-report-body" class="divide-y divide-slate-100"></tbody></table></div>
           <div class="mt-4 flex items-center justify-center gap-3"><button id="bonus-report-prev" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">上一頁</button><span id="bonus-report-page" class="text-sm text-slate-600"></span><button id="bonus-report-next" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">下一頁</button></div>
+        </section>
+      </div>
+      <div id="tab-commission-ledger" class="tab-content hidden space-y-6">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6">
+          <h2 class="text-xl font-black text-slate-800">傭金匯款總帳</h2>
+          <p class="text-sm text-slate-600 mt-2">彙整有共創契約、獎金或付款紀錄的會員。合約待審、資料不完整或不一致時會以紅字提醒。</p>
+          <form id="commission-ledger-filters" class="mt-5 flex flex-wrap items-end gap-3">
+            <label class="text-sm font-bold text-slate-600">會員姓名或編號<input id="commission-ledger-search" type="search" autocomplete="off" class="block mt-1 min-h-[44px] rounded-lg border border-slate-300 px-3 font-normal" placeholder="搜尋姓名或會員編號"></label>
+            <label class="text-sm font-bold text-slate-600">月份<input id="commission-ledger-month" type="month" class="block mt-1 min-h-[44px] rounded-lg border border-slate-300 px-3 font-normal"></label>
+            <button type="submit" class="min-h-[44px] px-4 rounded-lg bg-slate-800 text-white font-bold">查詢</button>
+            <button id="commission-ledger-reset" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">清除條件</button>
+          </form>
+          <p class="text-xs text-slate-500 mt-3">月份依已確認業績歸屬月統計傭金，未確認者依流水建立月；付款紀錄依付款日期，手簽資料不受月份篩選。請核對受款資格及銀行資料；本頁不執行匯款。匯出帳號時，Excel 請以文字格式匯入以保留前面的零。</p>
+          <p id="commission-ledger-message" class="mt-3 text-sm text-slate-500" role="status" aria-live="polite">尚未載入</p>
+        </section>
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap gap-2" role="group" aria-label="總帳檢視">
+              <button id="commission-ledger-summary" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">經銷商總覽</button>
+              <button id="commission-ledger-awards" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">傭金明細</button>
+              <button id="commission-ledger-payments" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">匯款紀錄</button>
+            </div>
+            <button id="commission-ledger-export" type="button" class="min-h-[44px] px-4 rounded-lg bg-emerald-700 text-white font-bold">匯出目前檢視 CSV</button>
+          </div>
+          <p id="commission-ledger-selection" class="text-sm text-slate-600 mt-3"></p>
+          <p class="text-xs text-slate-500 mt-1">匯出經銷商總覽會包含完整銀行帳號。</p>
+          <div class="overflow-x-auto mt-4"><table class="w-full min-w-[850px] text-sm text-left"><thead id="commission-ledger-head" class="text-slate-500 bg-slate-50"></thead><tbody id="commission-ledger-body" class="divide-y divide-slate-100"></tbody></table></div>
+          <div class="mt-4 flex items-center justify-center gap-3"><button id="commission-ledger-prev" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">上一頁</button><span id="commission-ledger-page" class="text-sm text-slate-600"></span><button id="commission-ledger-next" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">下一頁</button></div>
         </section>
       </div>
       <div id="tab-finance" class="tab-content hidden space-y-6">
@@ -2271,6 +2303,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (tabId === 'customer-imports') loadAdminCustomerImports(false);
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus-report' && adminRole === 'admin') void window.loadAdminBonusReport();
+      if (tabId === 'commission-ledger' && adminRole === 'admin') void window.loadAdminCommissionLedger();
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
       if (tabId === 'checkin-content') loadSystemCheckinContents();
@@ -5779,6 +5812,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           document.getElementById('nav-partners')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-mall')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-bonus-report')?.classList.toggle('hidden', adminRole !== 'admin');
+          document.getElementById('nav-commission-ledger')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-checkin-mall-report')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-checkin-chat-dashboard')?.classList.toggle('hidden', adminRole !== 'admin');
           loadSavedAdminCrmFilters();
@@ -5817,6 +5851,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-mall-dashboard.js?v=15"></script>
   <script src="js/modules/checkin-mall-report.js?v=2"></script>
   <script src="js/modules/admin-bonus-report.js?v=2"></script>
+  <script src="js/modules/admin-commission-ledger.js?v=1"></script>
   <script src="js/modules/checkin-chat-dashboard.js?v=3"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
   <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
