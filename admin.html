@@ -512,6 +512,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">insights</span>
             營運財務報表
           </a>
+          <a href="#" onclick="switchTab('bonus-report'); return false" id="nav-bonus-report" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">summarize</span>
+            獎金報表
+          </a>
           <a href="#" onclick="switchTab('checkin-chat-dashboard'); return false" id="nav-checkin-chat-dashboard" aria-label="聊天室儀表板" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">view_carousel</span>聊天室儀表板
           </a>
@@ -1002,6 +1006,38 @@
       </div>
 
       <!-- Tab: Finance -->
+      <div id="tab-bonus-report" class="tab-content hidden space-y-6">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6">
+          <h2 class="text-xl font-black text-slate-800">獎金報表</h2>
+          <p class="text-sm text-slate-500 mt-2">依核定業績歸屬月份查詢；未指定時依成交確認月，再以流水建立月補足。各狀態分開列示。此報表不代表已請款或已完成實際轉帳。</p>
+          <form id="bonus-report-filters" class="mt-5 flex flex-wrap gap-3 items-end">
+            <label class="text-sm font-bold text-slate-600">會員姓名或編號<input id="bonus-report-search" type="search" autocomplete="off" class="block mt-1 w-full min-h-[44px] rounded-lg border border-slate-300 px-3 font-normal" placeholder="搜尋會員"></label>
+            <label class="text-sm font-bold text-slate-600">業績歸屬月份<input id="bonus-report-month" type="month" class="block mt-1 min-h-[44px] rounded-lg border border-slate-300 px-3 font-normal"></label>
+            <label class="text-sm font-bold text-slate-600">獎金狀態<select id="bonus-report-status" class="block mt-1 min-h-[44px] rounded-lg border border-slate-300 px-3 font-normal"><option value="">全部狀態</option><option value="__blank__">未標示狀態</option><option value="review_required">待核對</option><option value="frozen">凍結中</option><option value="payable">可給付</option><option value="paid">已付款（系統紀錄）</option><option value="reversed">已沖回</option><option value="service_ineligible">服務資格不符</option><option value="cancelled">已取消</option></select></label>
+            <button class="min-h-[44px] px-4 rounded-lg bg-slate-800 text-white font-bold" type="submit">查詢</button>
+            <button id="bonus-report-reset" class="min-h-[44px] px-4 rounded-lg border border-slate-300 text-slate-700 font-bold" type="button">清除條件</button>
+          </form>
+          <p id="bonus-report-message" class="mt-3 text-sm text-slate-500" role="status" aria-live="polite">尚未載入</p>
+        </section>
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6">
+          <h3 class="text-lg font-bold text-slate-800">全站狀態彙整</h3>
+          <p class="mt-1 text-sm text-slate-500">依目前查詢條件分別統計，沖回與其他狀態不混計。</p>
+          <div id="bonus-report-totals" class="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3"></div>
+        </section>
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap gap-2" role="group" aria-label="報表檢視">
+              <button id="bonus-report-summary" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">會員彙整</button>
+              <button id="bonus-report-details" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 font-bold">獎金明細</button>
+            </div>
+            <button id="bonus-report-export" type="button" class="min-h-[44px] px-4 rounded-lg bg-emerald-700 text-white font-bold">匯出目前檢視 CSV</button>
+          </div>
+          <p id="bonus-report-selection" class="text-sm text-slate-600 mt-3"></p>
+          <p class="text-xs text-slate-500 mt-2">時間顯示為台北時間；結算時間不一定是實際付款時間。匯出所有符合條件的資料，匯出期間若資料變動可能需要重新匯出。CSV 請在 Excel 使用「從文字／CSV」匯入並將會員編號欄設為文字，以保留完整編號。</p>
+          <div class="overflow-x-auto mt-4"><table class="w-full min-w-[760px] text-sm text-left"><thead id="bonus-report-head" class="text-slate-500 bg-slate-50"></thead><tbody id="bonus-report-body" class="divide-y divide-slate-100"></tbody></table></div>
+          <div class="mt-4 flex items-center justify-center gap-3"><button id="bonus-report-prev" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">上一頁</button><span id="bonus-report-page" class="text-sm text-slate-600"></span><button id="bonus-report-next" type="button" class="min-h-[44px] px-4 rounded-lg border border-slate-300 disabled:opacity-40">下一頁</button></div>
+        </section>
+      </div>
       <div id="tab-finance" class="tab-content hidden space-y-6">
         <div class="grid grid-cols-4 gap-6">
           <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -2234,6 +2270,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'customer-imports') loadAdminCustomerImports(false);
       if (tabId === 'finance') loadFinanceStats();
+      if (tabId === 'bonus-report' && adminRole === 'admin') void window.loadAdminBonusReport();
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
       if (tabId === 'checkin-content') loadSystemCheckinContents();
@@ -5740,6 +5777,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
           document.getElementById('nav-partners')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-mall')?.classList.toggle('hidden', adminRole !== 'admin');
+          document.getElementById('nav-bonus-report')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-checkin-mall-report')?.classList.toggle('hidden', adminRole !== 'admin');
           document.getElementById('nav-checkin-chat-dashboard')?.classList.toggle('hidden', adminRole !== 'admin');
           loadSavedAdminCrmFilters();
@@ -5777,6 +5815,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-partners-dashboard.js?v=1.3"></script>
   <script src="js/modules/admin-mall-dashboard.js?v=15"></script>
   <script src="js/modules/checkin-mall-report.js?v=2"></script>
+  <script src="js/modules/admin-bonus-report.js?v=2"></script>
   <script src="js/modules/checkin-chat-dashboard.js?v=3"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
   <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
@@ -5789,6 +5828,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     <link rel="stylesheet" href="css/activity-checkin.css?v=1">
     <script src="js/modules/activity-checkin.js?v=1"></script>
     <script src="js/modules/admin-activity-registration.js?v=11"></script>
+    <script src="js/modules/admin-bonus-bootstrap.js?v=1"></script>
 <script src="js/modules/dealer-workspace.js?v=1"></script>
 </body>
 </html>
