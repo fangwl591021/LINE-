@@ -28,17 +28,24 @@ export async function mountCommerce(host,{base,mode,shop,products=[],selectedPro
   }
   host.innerHTML='<button type="button" data-do="manage">返回商城管理</button><section class="commerce-panel"><p role="status">載入線上商城…</p></section>';
   if(mode!=='merchant'){host.querySelector('button').dataset.do='list';host.querySelector('button').textContent='返回店家列表';}
-  const panel=host.querySelector('.commerce-panel');let busy=false,epoch=0,config,quoted,input,orders=[],page=0,sameRecipient=true,savedBuyerProfile=null,pointsEnabled=false,placedView=false;
-  function paint(html){if(current())panel.innerHTML=`<p class="shop-notice">各店自行收款。${pointsEnabled?'購物金依商品上限折抵，運費不折抵；':'本次未開放線上點數折抵；'}剩餘款項以匯款支付。LINE Pay、自動現金退款與物流串接尚未開放。</p><p class="commerce-error" role="alert"></p>${html}`;}
+  const panel=host.querySelector('.commerce-panel');let busy=false,epoch=0,config,quoted,input,orders=[],page=0,sameRecipient=true,savedBuyerProfile=null,pointsEnabled=false,placedView=false,managedShops=[],selectedShop='';
+  function paint(html){if(current())panel.innerHTML=`${mode==='merchant'&&managedShops.length>1?`<label>管理店家<select data-commerce-shop>${managedShops.map(s=>`<option value="${esc(s.id)}" ${s.id===selectedShop?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`:''}<p class="shop-notice">各店自行收款。${pointsEnabled?'購物金依商品上限折抵，運費不折抵；':'本次未開放線上點數折抵；'}剩餘款項以匯款支付。LINE Pay、自動現金退款與物流串接尚未開放。</p><p class="commerce-error" role="alert"></p>${html}`;}
   function error(e){if(current()){const el=panel.querySelector('.commerce-error');if(el){el.textContent=e.message;el.scrollIntoView({block:'center'});}}}
   const steps=active=>`<ol class="commerce-steps" aria-label="購買流程">${['選購／收件','核對後下單扣點','匯款／回報','店家核帳出貨'].map((s,i)=>`<li ${i===active?'aria-current="step"':''}>${i+1}. ${s}</li>`).join('')}</ol>`;
   function reveal(selector){panel.querySelector(selector)?.scrollIntoView({behavior:'smooth',block:'start'});}
   async function api(path,data) {
     if(!current())throw new Error('登入身分或頁面已改變，請重新開啟');
-    const response=await fetch(`${base}/v1/store-commerce${path}`,{method:data?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(15000)});
+    const scoped=mode==='merchant'&&selectedShop&&(/^\/settings(?:\?|$)/.test(path)||/^\/orders(?:[/?]|$)/.test(path));
+    const target=path+(scoped?(path.includes('?')?'&':'?')+'shop='+encodeURIComponent(selectedShop):'');
+    const response=await fetch(`${base}/v1/store-commerce${target}`,{method:data?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(15000)});
     const result=await response.json();if(!current())throw new Error('登入身分或頁面已改變，請重新開啟');
     if(!response.ok||!result.success){const error=new Error(result.error||'線上商城暫時無法使用');error.status=response.status;throw error;}return result;
   }
+  panel.onchange=event=>{
+    if(!event.target.matches('[data-commerce-shop]'))return;
+    const next=event.target.value;if(!managedShops.some(s=>s.id===next))return;
+    selectedShop=next;epoch++;void run(async()=>settingsForm(await api('/settings')));
+  };
   async function run(job) {
     if(busy)return;busy=true;const controls=[...panel.querySelectorAll('button,input,select')],disabled=controls.map(c=>c.disabled);controls.forEach(c=>c.disabled=true);
     try{await job();}catch(e){error(e);}finally{busy=false;controls.forEach((c,i)=>c.disabled=disabled[i]);panel.querySelector('[data-commerce-form="quote"]')?.dispatchEvent(new Event('input'));}
@@ -195,7 +202,11 @@ export async function mountCommerce(host,{base,mode,shop,products=[],selectedPro
   paint('<p role="status">驗證線上商城設定…</p>');
   try {
     const capability=await api('/capabilities');pointsEnabled=capability.points_enabled===true;
-    if(mode==='merchant')settingsForm(await api('/settings'));
+    if(mode==='merchant'){
+      managedShops=(await api('/shops')).shops||[];
+      selectedShop=managedShops.some(s=>s.id===shop?.id)?shop.id:(managedShops[0]?.id||'');
+      settingsForm(await api('/settings'));
+    }
     else if(mode==='orders')await listOrders();
     else {if(capability.enabled)checkoutForm();else paint('<h2>線上交易準備中</h2><p>目前不會建立訂單或扣點，原有商品 QR 折抵不受影響。</p>');}
   }catch(e){error(e);}
