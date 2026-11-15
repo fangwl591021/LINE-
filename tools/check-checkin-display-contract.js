@@ -18,7 +18,7 @@ const claim = claimMatch[0];
 if (claim.includes("'已簽到'") || claim.includes('"已簽到"')) {
   fail('daily check-in button must not show 已簽到');
 }
-if (!claim.includes('\\u5df2\\u8d08\\u9001') || !claim.includes('showPointAwardCelebration')) {
+if (!claim.includes('簽到成功，已獲得') || !claim.includes('購物金') || !claim.includes('awardedPoints') || !claim.includes('showPointAwardCelebration')) {
   fail('daily check-in success must show awarded points with popup/toast');
 }
 if (!/btn\.disabled\s*=\s*false/.test(claim)) {
