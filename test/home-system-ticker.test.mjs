@@ -73,6 +73,27 @@ test('configured and live messages load independently, deduplicate and hide when
   f.win.fetchAPI=async()=>({success:false});await f.win.loadHomeSystemTicker();assert.equal(f.box.hidden,true);
 });
 
+test('first available source starts moving without waiting for the other source',async()=>{
+  for(const firstAction of ['getSystemTicker','getSystemTickerLiveStats']){
+    const pending=[];const f=fixture(action=>new Promise(resolve=>pending.push({action,resolve})));
+    const loading=f.win.loadHomeSystemTicker();
+    const first=pending.find(p=>p.action===firstAction),second=pending.find(p=>p.action!==firstAction);
+    first.resolve(firstAction==='getSystemTicker'?{data:{enabled:true,text:'即時公告'}}:{success:true,data:{todayCardCollectionCount:3}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.box.hidden,false);assert.equal(f.animations.length,1,'available text animates while the other source is pending');
+    assert.match(f.text.attributes['aria-label'],firstAction==='getSystemTicker'?/即時公告/:/收藏名片 3 張/);
+    second.resolve(firstAction==='getSystemTicker'?{success:true,data:{todayCardCollectionCount:3}}:{data:{enabled:true,text:'即時公告'}});
+    await loading;assert.equal(f.text.attributes['aria-label'],'即時公告　 •　 📇 今日全系統新增收藏名片 3 張');
+  }
+});
+
+test('ticker is scheduled immediately without the idle callback delay',()=>{
+  const block=source.slice(source.indexOf('    window.scheduleHomeDataLoadsByRole ='),source.indexOf('    window.loadHomeData ='));
+  assert.match(block,/runHomeBackgroundTask_\('home-system-ticker',\s*0,/);
+  assert.ok(block.indexOf("runHomeBackgroundTask_('home-system-ticker'")<block.indexOf("runHomeBackgroundTask_('subsite-home-fast'"));
+  assert.match(source,/key === 'home-system-ticker' \|\| key === 'subsite-home-fast'/);
+});
+
 test('slower older loads cannot overwrite newer ticker content',async()=>{
   const pending=[];const f=fixture(action=>new Promise(resolve=>pending.push({action,resolve})));
   const older=f.win.loadHomeSystemTicker(),newer=f.win.loadHomeSystemTicker();
