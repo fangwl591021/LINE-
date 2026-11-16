@@ -271,6 +271,8 @@
   </style>
 <link rel="stylesheet" href="css/contract-organization.css?v=3">
 <script src="js/modules/contract-organization.js?v=3" defer></script>
+<link rel="stylesheet" href="css/dealer-account.css?v=1">
+<script src="js/modules/dealer-account.js?v=1" defer></script>
 <link rel="stylesheet" href="css/home-discovery-20261110.css?v=8">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
@@ -557,6 +559,9 @@
 
       <button type="button" id="member-organization-entry" onclick="window.ContractOrganization.member()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
         <span class="material-symbols-outlined" aria-hidden="true">account_tree</span> 我的組織圖
+      </button>
+      <button type="button" id="dealer-account-entry" onclick="window.openDealerAccount()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span> 經銷商帳務專區
       </button>
       <button id="member-cooperation-entry" type="button" onclick="window.openMemberCooperationApplications()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold mb-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
         <span class="material-symbols-outlined text-[22px]" aria-hidden="true">draw</span>
