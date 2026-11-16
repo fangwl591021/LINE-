@@ -557,12 +557,6 @@
         </div>
       </details>
 
-      <button type="button" id="member-organization-entry" onclick="window.ContractOrganization.member()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
-        <span class="material-symbols-outlined" aria-hidden="true">account_tree</span> 我的組織圖
-      </button>
-      <button type="button" id="dealer-account-entry" onclick="window.openDealerAccount()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
-        <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span> 經銷商帳務專區
-      </button>
       <button id="member-cooperation-entry" type="button" onclick="window.openMemberCooperationApplications()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold mb-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
         <span class="material-symbols-outlined text-[22px]" aria-hidden="true">draw</span>
         合作申請
@@ -942,6 +936,12 @@
           <span class="material-symbols-outlined text-[20px]">swap_horiz</span> <span id="admin-switch-text">切換至後台 (管理模式)</span>
         </button>
       </div>
+      <button type="button" id="member-organization-entry" onclick="window.ContractOrganization.member()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
+        <span class="material-symbols-outlined" aria-hidden="true">account_tree</span> 我的組織圖
+      </button>
+      <button type="button" id="dealer-account-entry" onclick="window.openDealerAccount()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span> 經銷商帳務專區
+      </button>
     </div>
 
     <!-- ==================== 升級租戶購買頁 ==================== -->
@@ -3046,7 +3046,7 @@
   <script type="module" src="js/modules/daily-tank-challenge.js?v=6"></script>
   <script type="module" src="js/modules/game-center.mjs?v=2&richman=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=3&adminRoute=1&invitePrompt=0"></script>
+  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=3&adminRoute=1&invitePrompt=0&dealerBottom=1"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.4&order=2"></script>
 </body>
