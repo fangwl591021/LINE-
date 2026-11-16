@@ -116,6 +116,7 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
     ${agreement('我已核對本筆收款、審核與開通證據、服務年度及加入類型，且沒有撤銷、退費或異常。')}${submit('確認有效成交並核算新制獎金')}`);
   const renewalAction=action('renewal',result.renewalHolds?.length?'核對續約獎金（'+result.renewalHolds.length+' 筆）':'核對續約獎金',`<p>原推薦人及當下管理歸屬各25%分別核對；只能補足真實關係與同意證據，不能任意更換受領人。另一份已核對結果保留。</p>${(result.renewalHolds||[]).length?`<ul>${result.renewalHolds.map(held=>`<li class="ra-copy">${esc(held.order_id)} · ${esc(held.portion==='renewal_referral'?'原推薦人25%':'當下歸屬人25%')} · NT$ ${money(held.amount)} · ${esc(held.reason)} · 處理期限：${esc(held.handling_due_at||'待核')}</li>`).join('')}</ul>`:'<p>目前沒有待核續約份額。</p>'}${input('orderId','續約訂單編號')}${input('writtenPercent','115.11 爭議或另有書面約定時，核准之基準獎金比例（0～100%，其餘留白）','number',false,'min="0" max="100" step="1"')}${select('portion','本次核對份額',[['renewal_referral','原推薦人25%'],['renewal_placement','當下歸屬人25%']])}${lookupControls('beneficiary','真實受領人的會員編號')}${input('consentSha256','關係／同意證據 SHA-256 校驗碼')}${input('evidenceRef','證據保管編號／參照')}${input('reason','補足核對資料的原因')}${agreement('我已核對此份額的真實受領人、原始關係及有效同意證據，未任意改寫原推薦人或另一份額。')}${submit('確認核對此續約份額')}`);
   shell(`<div class="ra-note"><strong>會員資格</strong>
+   ${result.adminGrant?`<p>經銷商資格：管理員核准，自 ${esc(result.adminGrant.effectiveAt)} 起適用。此紀錄不是手簽合約。</p>`:''}
    <p>${records.length ? "已登錄契約 "+records.length+" 份" : "尚未登錄已簽契約"}</p>
    <p>${result.projectFeeWaivedAt?"年費專案免收":"尚無專案免收紀錄"} · ${result.projectIndependentAt?"已核准專案獨立":"依一般條件取得獨立資格"}</p></div>
    <section class="ra-record"><h3>常用操作</h3>

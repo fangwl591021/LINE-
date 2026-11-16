@@ -17,6 +17,7 @@
   }
   function renderAccount(container,data,changePage){
     container.replaceChildren();
+    if(data.qualification?.source==='admin_grant')container.append(make('p','經銷商資格：管理員核准（依現行制度計算）。','dealer-account-note'));
     if(data.identityReview)container.append(make('p','部分歷史身分尚未完成歸戶，可能有資料待核對，請聯絡管理員。','dealer-account-warning'));
     const perf=data.performance,bonus=data.bonus,summary=make('div',null,'dealer-account-cards');
     const totals=Object.fromEntries((bonus.totals||[]).map(row=>[row.status,Number(row.amount)||0]));
