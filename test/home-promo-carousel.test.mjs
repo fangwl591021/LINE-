@@ -20,7 +20,9 @@ function fixture(reduced=false){
 }
 test('homepage retains the shop entry and includes all six original images in a fixed-height frame',()=>{
  assert.match(html,/id="home-mall-banner"[^>]*onclick="window\.openHomeShopCategory\(''\)"/);
+ assert.equal((html.match(/class="home-promo-slide" type="button" onclick="window\.openHomeShopCategory\(''\)"/g)||[]).length,7);
  assert.match(css,/\.home-promo-frame\s*\{[^}]*aspect-ratio:1670\/942/);
+ assert.match(css,/\.home-promo-controls\s*\{[^}]*position:absolute;[^}]*bottom:4px/);
  assert.match(css,/\.home-promo-frame #home-mall-banner\s*\{[^}]*width:100%;height:100%/);
  assert.match(css,/#home-mall-banner img\s*\{[^}]*height:100%;aspect-ratio:auto;object-fit:cover/);
  for(let i=1;i<=6;i++){const name=`home-promo-20261116-0${i}.jpg`;assert(html.includes(name));assert(existsSync(new URL('../assets/'+name,import.meta.url)));}
