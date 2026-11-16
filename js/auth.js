@@ -2898,6 +2898,10 @@ window.reorderSettingsSections = function() {
   }
   if (tenantPlan && tenantPlan.parentElement === page) page.appendChild(tenantPlan);
   if (performance && performance.parentElement === page) page.appendChild(performance);
+  for (const id of ['member-organization-entry', 'dealer-account-entry']) {
+    const entry = document.getElementById(id);
+    if (entry && entry.parentElement === page) page.appendChild(entry);
+  }
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
