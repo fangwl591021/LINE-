@@ -2027,6 +2027,8 @@
         adminPage: '1',
         t: String(Date.now())
       });
+      const requestedTab = new URLSearchParams(location.search || '').get('tab');
+      if (['checkin-chat-dashboard', 'bonus', 'bonus-report', 'commission-ledger'].includes(requestedTab)) params.set('tab', requestedTab);
       return 'https://liff.line.me/' + encodeURIComponent(LIFF_ID) + '?' + params.toString();
     }
 
@@ -5824,8 +5826,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
             return;
           }
           const requestedTab = new URLSearchParams(location.search || '').get('tab');
-          if (requestedTab === 'checkin-chat-dashboard' && adminRole === 'admin') {
-            switchTab('checkin-chat-dashboard');
+          if (adminRole === 'admin' && ['checkin-chat-dashboard', 'bonus', 'bonus-report', 'commission-ledger'].includes(requestedTab)) {
+            switchTab(requestedTab);
             return;
           }
           switchTab(new URLSearchParams(location.search || '').get('tab') === 'activities' ? 'activities' : 'users');

@@ -68,6 +68,41 @@ test('direct chat dashboard entry is exposed only after existing administrator v
   assert.ok(!user.calls.includes('tab:checkin-chat-dashboard'));
 });
 
+test('policy, bonus report and remittance tabs require verified administrator entry',async()=>{
+  for(const tab of ['bonus','bonus-report','commission-ledger']){
+    const admin=setup({role:'admin',hardAdmin:true});admin.context.location.search='?tab='+tab;await admin.run();
+    assert.ok(admin.calls.includes('tab:'+tab));
+    const store=setup({role:'store'});store.context.location.search='?tab='+tab;await store.run();
+    assert.ok(!store.calls.includes('tab:'+tab));assert.ok(store.calls.includes('tab:users'));
+    const guest=setup({role:'user'});guest.context.location.search='?tab='+tab;await guest.run();
+    assert.ok(!guest.calls.includes('tab:'+tab));
+  }
+  const unknown=setup({role:'admin',hardAdmin:true});unknown.context.location.search='?tab=other';await unknown.run();
+  assert.ok(unknown.calls.includes('tab:users'));assert.ok(!unknown.calls.includes('tab:other'));
+});
+
+test('login handoff preserves only approved admin destination tabs',()=>{
+  const entry=html.slice(html.indexOf('    function getAdminLiffEntryUrl()'),html.indexOf('    function isHardAdminAccount('));
+  const context={URLSearchParams,encodeURIComponent,LIFF_ID:'123-test',location:{search:''},Date};
+  vm.createContext(context);vm.runInContext(entry,context);
+  for(const tab of ['checkin-chat-dashboard','bonus','bonus-report','commission-ledger']){
+    context.location.search='?tab='+tab;const url=new URL(context.getAdminLiffEntryUrl());
+    assert.equal(url.searchParams.get('tab'),tab);assert.equal(url.searchParams.get('adminPage'),'1');
+  }
+  context.location.search='?tab=untrusted';assert.equal(new URL(context.getAdminLiffEntryUrl()).searchParams.has('tab'),false);
+  const source=readFileSync(new URL('../js/auth.js',import.meta.url),'utf8');
+  const start=source.indexOf("    if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {");
+  const end=source.indexOf("    const shareCardId =",start);assert.ok(start>=0&&end>start);
+  const redirect=source.slice(start,end);let destination='';
+  const handoff={URLSearchParams,String,Date,window:{location:{replace:value=>{destination=value}}}};
+  for(const tab of ['bonus','bonus-report','commission-ledger','untrusted']){
+    destination='';handoff.urlParams=new URLSearchParams({adminPage:'1',tab});
+    vm.runInNewContext(`(function(){${redirect}})()`,handoff);
+    const url=new URL(destination,'https://example.test/');
+    assert.equal(url.pathname,'/admin.html');assert.equal(url.searchParams.get('tab'),tab==='untrusted'?null:tab);
+  }
+});
+
 test('SDK can finish loading asynchronously; no dependency on synchronous script execution',async()=>{
   const f=setup({hang:'sdk'}),pending=f.run();await tick();
   f.context.window.liff=f.context.liff;f.node('admin-liff-sdk').load();await pending;
