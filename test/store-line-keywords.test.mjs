@@ -52,7 +52,7 @@ test('admin global summary and store-owned summary do not mix stores or receipts
  assert.equal(global.shops.total,2);assert.equal(global.orders.unfulfilled,2);assert.equal(global.orders.received,20000);assert.equal(global.redemptions.total,2);
  assert.equal(own.today,'2026-09-11');
  const card=await buildShopKeywordMessage(event('儀表板',B),f.env,now);
- assertCarousel(card,4);assertAdminEditorFirst(card,1);
+ assertCarousel(card,5);assertAdminEditorFirst(card,2);
  assert.equal(card.altText,'全商城營運儀錶板');assert(!JSON.stringify(card).includes(C));assert(JSON.stringify(card).includes('非銀行實收'));
 });
 
@@ -72,12 +72,12 @@ test('dashboard shows partial failure honestly and keeps other pages available',
  const f=fixture(t),prepare=f.db.prepare.bind(f.db);
  f.db.prepare=query=>query.includes('FROM card_contacts')?{bind:()=>({all:async()=>{throw Error('private details');}})}:prepare(query);
  const first=await buildShopKeywordMessage(event('儀表板',B),f.env);
- assertCarousel(first,4);assert(JSON.stringify(bubbles(first)[0]).includes('暫時無法讀取'));
- assert(JSON.stringify(bubbles(first)[2]).includes('共 2 筆'));assert(!JSON.stringify(first).includes('private details'));
+ assertCarousel(first,5);assert(JSON.stringify(bubbles(first)[0]).includes('暫時無法讀取'));
+ assert(JSON.stringify(bubbles(first)[3]).includes('共 2 筆'));assert(!JSON.stringify(first).includes('private details'));
  f.db.prepare=query=>query.includes('FROM store_shop_stores s')?{bind:()=>({first:async()=>{throw Error('private details');}})}:prepare(query);
  const second=await buildShopKeywordMessage(event('儀表板',B),f.env);
- assertCarousel(second,4);assert(JSON.stringify(bubbles(second)[0]).includes('會員資料 3 筆'));
- assert(JSON.stringify(bubbles(second)[2]).includes('商城摘要暫時無法讀取'));
+ assertCarousel(second,5);assert(JSON.stringify(bubbles(second)[0]).includes('會員資料 3 筆'));
+ assert(JSON.stringify(bubbles(second)[3]).includes('商城摘要暫時無法讀取'));
 });
 test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Taipei-day rows',async t=>{
  const f=fixture(t);
@@ -244,9 +244,9 @@ test('admin dashboard shows global overview and preserves the editor and owner-s
  for(const keyword of ['儀錶板','儀表板','店家專區']){
   const message=await buildShopKeywordMessage(event(keyword,B),f.env,new Date('2026-09-11T01:00:00Z'));
   const dashboard=keyword!=='店家專區';
-  assertCarousel(message,dashboard?4:3);assertAdminEditorFirst(message,dashboard?1:0);
+  assertCarousel(message,dashboard?5:3);assertAdminEditorFirst(message,dashboard?2:0);
   assert.equal(message.altText,keyword==='店家專區'?'店家專區':'全商城營運儀錶板');
-  const second=JSON.stringify(bubbles(message)[dashboard?2:1]),operations=bubbles(message)[dashboard?3:2];
+  const second=JSON.stringify(bubbles(message)[dashboard?3:1]),operations=bubbles(message)[dashboard?4:2];
   if(dashboard){
    const overview=JSON.stringify(bubbles(message)[0]);
    assert(overview.includes('點數通營運儀表板'));assert(overview.includes('會員資料 3 筆'));
@@ -254,6 +254,12 @@ test('admin dashboard shows global overview and preserves the editor and owner-s
    const links=bubbles(message)[0].footer.contents.map(node=>node.action);
    assert(links.some(action=>action.type==='message'&&action.text==='儀表板'));
    assert(links.some(action=>action.type==='uri'&&action.uri==='https://fangwl591021.github.io/LINE-/admin.html'));
+   assert(links.some(action=>action.type==='uri'&&action.label==='制度區'&&action.uri.endsWith('?tab=bonus')));
+   const policy=bubbles(message)[1];assert.equal(policy.header.contents[0].text,'制度區');
+   const entries=policy.footer.contents.map(node=>node.action);
+   assert.deepEqual(entries.map(entry=>entry.label),['獎金制度','獎金報表','傭金匯款總帳']);
+   assert.deepEqual(entries.map(entry=>new URL(entry.uri).searchParams.get('tab')),['bonus','bonus-report','commission-ledger']);
+   assert(entries.every(entry=>entry.type==='uri'&&new URL(entry.uri).searchParams.size===1));
   }
   if(keyword==='店家專區'){
    assert(second.includes('OWNER-B-ONLY'));assert(!second.includes('OWNER-A-ONLY'));
@@ -274,7 +280,7 @@ test('merchant carousels never acquire admin editor while nonmerchant plans get 
   f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
   for(const keyword of ['儀錶板','店家專區']){
    const message=await buildShopKeywordMessage(event(keyword,A),f.env);assertCarousel(message,2);
-   assert(!JSON.stringify(message).includes('OTHER-OWNER-SECRET'));assert(!actions(message).some(action=>action.label==='編輯會員打卡'||action.uri?.includes('checkin-chat-dashboard')));
+   assert(!JSON.stringify(message).includes('OTHER-OWNER-SECRET'));assert(!actions(message).some(action=>action.label==='編輯會員打卡'||action.label==='制度區'||action.uri?.includes('checkin-chat-dashboard')||action.uri?.includes('tab=bonus')||action.uri?.includes('commission-ledger')));
    if(keyword==='儀錶板'){assert.equal(message.altText,'我的店家儀錶板');assert(JSON.stringify(bubbles(message)[0]).includes('共 1 筆'));}
   }
  }
@@ -287,7 +293,7 @@ test('merchant carousels never acquire admin editor while nonmerchant plans get 
   }
   assert(f.queries.slice(before).every(q=>q.startsWith('SELECT role')),'denied plans do not read store, order or ledger data');
  }
- f.sql.prepare("UPDATE users SET role='總管' WHERE line_id=?").run(B);assertAdminEditorFirst(await buildShopKeywordMessage(event('儀表板',B),f.env),1);
+ f.sql.prepare("UPDATE users SET role='總管' WHERE line_id=?").run(B);assertAdminEditorFirst(await buildShopKeywordMessage(event('儀表板',B),f.env),2);
 });
 
 test('multiple pages still send one Flex message per claimed event without an operations intermediary',async t=>{
@@ -296,8 +302,8 @@ test('multiple pages still send one Flex message per claimed event without an op
  assert.deepEqual(await consumeShopKeywords(events,f.env,async payload=>{sent.push(payload);return{success:true};}),[]);
  assert.equal(sent.length,4);
  for(let index=0;index<sent.length;index++){
-  assert.equal(sent[index].replyToken,'single-carousel-'+index);assert.equal(sent[index].messages.length,1);assertCarousel(sent[index].messages[0],index===0?4:index===1?3:2);
-  if(index<2)assertAdminEditorFirst(sent[index].messages[0],index===0?1:0);
+  assert.equal(sent[index].replyToken,'single-carousel-'+index);assert.equal(sent[index].messages.length,1);assertCarousel(sent[index].messages[0],index===0?5:index===1?3:2);
+  if(index<2)assertAdminEditorFirst(sent[index].messages[0],index===0?2:0);
  }
  assert(f.queries.every(query=>/^(SELECT|WITH)\b/.test(query.trim())));
 });

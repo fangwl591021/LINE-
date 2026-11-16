@@ -43,6 +43,19 @@ function checkinSettingsPage(){
   '左右滑動，直接查看營運內容與店家操作。'
  ],[action('編輯會員打卡','https://fangwl591021.github.io/LINE-/admin.html?tab=checkin-chat-dashboard')]);
 }
+function policyPage(){
+ const base='https://fangwl591021.github.io/LINE-/admin.html?tab=';
+ return card('制度區',[
+  '獎金制度：查看制度說明與業績管理。',
+  '獎金報表：查看會員獎金與全站彙整。',
+  '傭金匯款總帳：核對手簽銀行資料及匯款紀錄。',
+  '進入後台後仍須以有權限的管理員帳號登入。'
+ ],[
+  action('獎金制度',base+'bonus'),
+  action('獎金報表',base+'bonus-report'),
+  action('傭金匯款總帳',base+'commission-ledger')
+ ]);
+}
 async function adminOverviewPage(db){
  let lines;
  try{
@@ -55,6 +68,7 @@ async function adminOverviewPage(db){
  }
  return card('點數通營運儀表板',lines,[
   command('更新摘要','儀表板'),
+  action('制度區','https://fangwl591021.github.io/LINE-/admin.html?tab=bonus'),
   action('開啟管理後台','https://fangwl591021.github.io/LINE-/admin.html')
  ]);
 }
@@ -138,7 +152,7 @@ export async function buildShopKeywordMessage(event,env,now){
  let products;
  try{products=await readChatPage(db,uid,'products',1);}
  catch(error){if(!admin)throw error;products={lines:['商品資料暫時無法讀取，請稍後重新查詢。']};}
- return carousel(title,[...(platformAdmin?[await adminOverviewPage(db),checkinSettingsPage()]:[]),summary,storeOperationsPage(env,merchant,products.lines)]);
+ return carousel(title,[...(platformAdmin?[await adminOverviewPage(db),policyPage(),checkinSettingsPage()]:[]),summary,storeOperationsPage(env,merchant,products.lines)]);
 }
 const short=(value,max=80)=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const money=cents=>Number(cents).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});

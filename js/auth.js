@@ -3071,7 +3071,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {
-      window.location.replace('admin.html?from_liff=1&t=' + Date.now());
+      const adminParams = new URLSearchParams({from_liff:'1', t:String(Date.now())});
+      const adminTab = urlParams.get('tab');
+      if (['checkin-chat-dashboard', 'bonus', 'bonus-report', 'commission-ledger'].includes(adminTab)) adminParams.set('tab', adminTab);
+      window.location.replace('admin.html?' + adminParams.toString());
       return;
     }
     const shareCardId = urlParams.get('shareCardId');
