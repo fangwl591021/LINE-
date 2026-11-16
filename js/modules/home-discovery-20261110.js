@@ -1,6 +1,35 @@
 (function(){
   'use strict';
   const supported=['食','服務','購','宿','遊','行','製造'];
+  function initHomePromos(){
+    const carousel=document.getElementById('home-promo-carousel');
+    if(!carousel||carousel.dataset.ready==='1')return;
+    const slides=[...carousel.querySelectorAll('.home-promo-slide')];
+    const controls=carousel.querySelector('.home-promo-controls');
+    const dots=[...carousel.querySelectorAll('[data-promo-index]')];
+    const toggle=carousel.querySelector('[data-promo-toggle]');
+    if(slides.length!==7||dots.length!==slides.length||!controls||!toggle)return;
+    carousel.dataset.ready='1';
+    let index=0,timer=null,playing=!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const render=()=>{
+      slides.forEach((slide,i)=>{slide.hidden=i!==index;});
+      dots.forEach((dot,i)=>dot.setAttribute('aria-pressed',String(i===index)));
+      toggle.textContent=playing?'暫停':'播放';
+      toggle.setAttribute('aria-label',playing?'暫停輪播':'播放輪播');
+    };
+    const restart=()=>{
+      clearInterval(timer);timer=null;
+      if(playing)timer=setInterval(()=>{
+        if(document.hidden||document.getElementById('page-home')?.classList.contains('hidden'))return;
+        index=(index+1)%slides.length;render();
+      },3000);
+    };
+    dots.forEach((dot,i)=>dot.addEventListener('click',()=>{index=i;render();restart();}));
+    toggle.addEventListener('click',()=>{playing=!playing;render();restart();});
+    controls.hidden=false;render();restart();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initHomePromos,{once:true});
+  else initHomePromos();
   window.openHomeShopCategory=function(category){
     const selected=supported.includes(category)?category:'';
     if(typeof window.openStoreShop!=='function'){window.showToast?.('商城尚未載入，請稍後再試',true);return;}
