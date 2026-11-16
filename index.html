@@ -271,7 +271,7 @@
   </style>
 <link rel="stylesheet" href="css/contract-organization.css?v=3">
 <script src="js/modules/contract-organization.js?v=3" defer></script>
-<link rel="stylesheet" href="css/home-discovery-20261110.css?v=5">
+<link rel="stylesheet" href="css/home-discovery-20261110.css?v=6">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -1390,10 +1390,24 @@
         </button>
       </div>
 
-      <button id="home-mall-banner" type="button" onclick="window.openHomeShopCategory('')" aria-label="探索合作店家">
-        <img src="assets/home-discover-shops-20261110.webp" width="1200" height="400" alt="" decoding="async">
-        <span class="home-discovery-hero-copy"><strong>探索<span>好店</span></strong><small>找優質合作店家・用購物金更划算</small><b>⌕ 探索合作店家 ›</b></span>
-      </button>
+      <section id="home-promo-carousel" aria-label="首頁精選介紹" aria-roledescription="輪播">
+        <div class="home-promo-frame">
+          <button id="home-mall-banner" class="home-promo-slide" type="button" onclick="window.openHomeShopCategory('')" aria-label="探索合作店家">
+            <img src="assets/home-discover-shops-20261110.webp" width="1200" height="400" alt="" decoding="async">
+            <span class="home-discovery-hero-copy"><strong>探索<span>好店</span></strong><small>找優質合作店家・用購物金更划算</small><b>⌕ 探索合作店家 ›</b></span>
+          </button>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-01.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="購物金的多元應用：購物、美食、運動、學習、專業服務與活動體驗"></div>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-02.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="購物金可用於餐飲、購物、住宿、交通、生活服務與休閒娛樂"></div>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-03.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="購物金的學習、運動、健康與 AI 應用"></div>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-04.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="專業服務與樂齡生活的多元可能"></div>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-05.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="購物金帶動親子、遊戲、展覽、講座、市集與活動體驗"></div>
+          <div class="home-promo-slide" hidden><img src="assets/home-promo-20261116-06.jpg" width="1670" height="942" loading="lazy" decoding="async" alt="點數通串聯跨產業、跨區域和跨品牌的合作機會"></div>
+        </div>
+        <div class="home-promo-controls" aria-label="選擇輪播圖片" hidden>
+          <button type="button" data-promo-index="0" aria-label="第 1 張：探索好店"></button><button type="button" data-promo-index="1" aria-label="第 2 張：購物金多元應用"></button><button type="button" data-promo-index="2" aria-label="第 3 張：生活消費"></button><button type="button" data-promo-index="3" aria-label="第 4 張：學習運動健康"></button><button type="button" data-promo-index="4" aria-label="第 5 張：專業與樂齡"></button><button type="button" data-promo-index="5" aria-label="第 6 張：活動體驗"></button><button type="button" data-promo-index="6" aria-label="第 7 張：跨業合作"></button>
+          <button type="button" data-promo-toggle aria-label="暫停輪播">暫停</button>
+        </div>
+      </section>
 
       <section id="home-network-search-entry" class="mx-0 mt-4 border-y border-emerald-100 bg-white px-4 py-4 shadow-sm">
         <button id="home-ai-match-interest-summary" type="button" onclick="window.openHomeAiMatchInterest?.()" class="hidden mb-3 w-full rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-left active:scale-[0.99] transition-transform">
@@ -3009,7 +3023,7 @@
     <script src="js/modules/member-event-dm.js?v=2"></script>
 <script src="js/modules/member-hosted-events.js?v=8"></script>
 <script src="js/modules/home.js?v=8.27&invite=2&ticker=1"></script>
-<script src="js/modules/home-discovery-20261110.js?v=2"></script>
+<script src="js/modules/home-discovery-20261110.js?v=3"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
 <script src="js/modules/customers.js?v=1.2"></script>
