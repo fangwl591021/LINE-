@@ -4,6 +4,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const labels = {review_required:'待核對', frozen:'凍結中', payable:'可給付', paid:'已付款（系統紀錄）', reversed:'已沖回', service_ineligible:'服務資格不符', cancelled:'已取消'};
   const label = status => labels[status] || String(status || '未標示狀態');
+  const bonusType = type => type === 'legacy_manual_direct' ? '歷史推薦獎金（人工補登）' : type;
   const money = value => Number.isFinite(Number(value)) ? Number(value).toLocaleString('zh-TW', {maximumFractionDigits: 2}) : '—';
   const taipeiTime = value => {
     if (!value) return '';
@@ -66,7 +67,7 @@
     }
     id('body').innerHTML = state.rows.map(row => {
       const member = `<strong>${esc(row.memberName || '未能唯一辨識會員')}</strong><br><span class="text-xs text-slate-500">會員編號：${esc(row.memberNumber || '未登錄')}<br>${esc(row.memberId)}</span>`;
-      const cells = isSummary ? [member, esc(row.count), ...statuses.map(s => esc(money(row.statusAmounts?.[s] ?? 0))), `<button type="button" class="min-h-[44px] px-3 rounded-lg text-blue-700 border border-blue-200 font-bold" data-member="${esc(row.memberId)}" data-name="${esc(row.memberName || '')}">查看明細</button>`] : [member, esc(row.bonusType), esc(money(row.amount)), esc(label(row.status)), esc(row.orderId), esc(row.txId), esc(row.performanceMonth), esc(taipeiTime(row.createdAt)), esc(taipeiTime(row.updatedAt)), esc(taipeiTime(row.settledAt)), esc(row.note)];
+      const cells = isSummary ? [member, esc(row.count), ...statuses.map(s => esc(money(row.statusAmounts?.[s] ?? 0))), `<button type="button" class="min-h-[44px] px-3 rounded-lg text-blue-700 border border-blue-200 font-bold" data-member="${esc(row.memberId)}" data-name="${esc(row.memberName || '')}">查看明細</button>`] : [member, esc(bonusType(row.bonusType)), esc(money(row.amount)), esc(label(row.status)), esc(row.orderId), esc(row.txId), esc(row.performanceMonth||'待核對'), esc(taipeiTime(row.createdAt)), esc(taipeiTime(row.updatedAt)), esc(taipeiTime(row.settledAt)), esc(row.note)];
       return '<tr>' + cells.map(cell => `<td class="px-3 py-3 align-top whitespace-nowrap">${cell}</td>`).join('') + '</tr>';
     }).join('');
   }
@@ -116,7 +117,7 @@
       }
       const statuses = statusColumns(totals);
       const headers = selectedMode === 'summary' ? ['會員姓名','會員編號','會員識別碼','流水筆數',...statuses.map(label)] : ['會員姓名','會員編號','會員識別碼','獎金類型','金額','狀態','訂單編號','流水編號','業績歸屬月份','建立時間','更新時間','結算時間','備註'];
-      const records = rows.map(row => selectedMode === 'summary' ? [row.memberName,row.memberNumber,row.memberId,Number(row.count),...statuses.map(s => Number(row.statusAmounts?.[s] ?? 0))] : [row.memberName,row.memberNumber,row.memberId,row.bonusType,Number(row.amount),label(row.status),row.orderId,row.txId,row.performanceMonth,taipeiTime(row.createdAt),taipeiTime(row.updatedAt),taipeiTime(row.settledAt),row.note]);
+      const records = rows.map(row => selectedMode === 'summary' ? [row.memberName,row.memberNumber,row.memberId,Number(row.count),...statuses.map(s => Number(row.statusAmounts?.[s] ?? 0))] : [row.memberName,row.memberNumber,row.memberId,bonusType(row.bonusType),Number(row.amount),label(row.status),row.orderId,row.txId,row.performanceMonth,taipeiTime(row.createdAt),taipeiTime(row.updatedAt),taipeiTime(row.settledAt),row.note]);
       const csv = '\uFEFF' + [headers,...records].map(record => record.map(safeCsvCell).join(',')).join('\r\n');
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8'}), url = URL.createObjectURL(blob), link = document.createElement('a');
       link.href = url; link.download = '獎金報表-' + (selectedMode === 'summary' ? '會員彙整' : '獎金明細') + '.csv';
