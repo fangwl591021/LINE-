@@ -1,5 +1,6 @@
 // Child-owned, display-only LINE keywords. Called only after signature verification.
 import {RETAIL_ROLES,storePlanForRole} from '../js/modules/store-cooperation-plans.mjs';
+import {readAdminOverviewCounts} from './admin-overview-counts.mjs';
 const merchantRoles=RETAIL_ROLES;
 const memberRoles=RETAIL_ROLES;
 const admins=['admin','總管'];
@@ -7,7 +8,7 @@ export function shopKeyword(event){
  if(event?.type!=='message'||event.message?.type!=='text')return '';
  const text=String(event.message.text||'').normalize('NFKC').trim();
  if(text==='店家專區')return 'portal';
- if(['儀錶板','儀表板'].includes(text))return 'dashboard';
+ if(['儀錶板','儀表板','仪表板'].includes(text))return 'dashboard';
  if(text==='商城業績')return 'sales';
  if(/^商城商品(?:\s|$)/.test(text))return 'products';
  if(/^商城訂單(?:\s|$)/.test(text))return 'orders';
@@ -41,6 +42,21 @@ function checkinSettingsPage(){
   '儲存草稿後發布，新版會套用後續打卡卡片。',
   '左右滑動，直接查看營運內容與店家操作。'
  ],[action('編輯會員打卡','https://fangwl591021.github.io/LINE-/admin.html?tab=checkin-chat-dashboard')]);
+}
+async function adminOverviewPage(db){
+ let lines;
+ try{
+  const s=await readAdminOverviewCounts(db),n=value=>Number(value).toLocaleString('zh-TW');
+  lines=[`會員資料 ${n(s.memberRecordCount)} 筆｜名片資料 ${n(s.cardRecordCount)} 筆`,
+   `上架活動 ${n(s.publishedActivityCount)} 個｜有效報名 ${n(s.activeRegistrationCount)} 筆`,
+   '數字口徑與後台營運財務報表相同；左右滑動查看商城與操作。'];
+ }catch{
+  lines=['會員、名片與活動摘要暫時無法讀取，請稍後重新查詢。','左右滑動仍可查看商城摘要及原有操作。'];
+ }
+ return card('點數通營運儀表板',lines,[
+  command('更新摘要','儀表板'),
+  action('開啟管理後台','https://fangwl591021.github.io/LINE-/admin.html')
+ ]);
 }
 function storeOperationsPage(env,merchant,lines=[],includeDashboard=false){
  const buttons=[command('我的商品','商城商品')];
@@ -106,18 +122,23 @@ export async function buildShopKeywordMessage(event,env,now){
   return card(`${kind==='orders'?'我的網購訂單':'我的商品'}・第 ${page} 頁`,lines,buttons);
  }
  if(!merchant)return {type:'text',text:'商城儀錶板僅開放管理員、店長。您仍可輸入「店家專區」管理自己的商品。'};
- const admin=kind==='dashboard'&&platformAdmin,s=await readMallSummary(db,uid,admin,now);
+ const admin=kind==='dashboard'&&platformAdmin;
+ let s;
+ try{s=await readMallSummary(db,uid,admin,now);}
+ catch(error){if(!admin)throw error;}
  const n=v=>Number(v).toLocaleString('zh-TW');
  const title=kind==='sales'?'我的店家業績':admin?'全商城營運儀錶板':'我的店家儀錶板';
- const summary=card(title,[
+ const summary=card(title,s?[
   `店家：${n(s.shops.active)} 家上架／共 ${n(s.shops.total)} 家\n商品：${n(s.products.active)} 項上架／${n(s.products.draft)} 項草稿`,
   `網購訂單：共 ${n(s.orders.total)} 筆\n待匯款 ${n(s.orders.pending)}／待核帳 ${n(s.orders.reported)}\n已付款待出貨／備妥 ${n(s.orders.unfulfilled)}／已出貨／待取貨 ${n(s.orders.shipped)}\n網購累計已核帳 NT$ ${n(s.orders.received/100)}`,
   `${s.today}（台灣時間）商品 QR 折抵：${n(s.redemptions.total)} 筆\n商品金額 NT$ ${n(s.redemptions.amount)}／折抵 ${n(s.redemptions.points)} 點\n折抵後應收 NT$ ${n(s.redemptions.amount-s.redemptions.points)}（非銀行實收）`,
   '網購與現場 QR 分開統計；不包含未經本商城商品 QR 確認的交易。'+(String(env.STORE_COMMERCE_ENABLED)==='true'?'':'線上交易仍未開放。')
- ],[command('更新摘要',kind==='sales'?'商城業績':'儀錶板'),...(kind==='sales'?[command('店家操作','店家專區')]:[])]);
+ ]:['商城摘要暫時無法讀取，請稍後重新查詢。'],[command('更新摘要',kind==='sales'?'商城業績':'儀錶板'),...(kind==='sales'?[command('店家操作','店家專區')]:[])]);
  if(kind==='sales')return summary;
- const products=await readChatPage(db,uid,'products',1);
- return carousel(title,[...(platformAdmin?[checkinSettingsPage()]:[]),summary,storeOperationsPage(env,merchant,products.lines)]);
+ let products;
+ try{products=await readChatPage(db,uid,'products',1);}
+ catch(error){if(!admin)throw error;products={lines:['商品資料暫時無法讀取，請稍後重新查詢。']};}
+ return carousel(title,[...(platformAdmin?[await adminOverviewPage(db),checkinSettingsPage()]:[]),summary,storeOperationsPage(env,merchant,products.lines)]);
 }
 const short=(value,max=80)=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const money=cents=>Number(cents).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});
