@@ -4,7 +4,7 @@
   const money=value=>'NT$ '+(Number(value)||0).toLocaleString('zh-TW');
   const time=value=>{const raw=String(value||'');const date=new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(raw)?raw.replace(' ','T')+'Z':raw);return Number.isFinite(date.getTime())?date.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):'時間待核對';};
   const statusNames={review_required:'待核對',frozen:'凍結中',payable:'可給付',paid:'系統標記已付款',reversed:'已沖銷',service_ineligible:'服務資格待核',cancelled:'已取消'};
-  const types={direct_full:'直接推薦獎金',direct_split:'直接推薦獎金',first_two_passup:'推薦承接獎金',renewal_referral:'續約推薦獎金',renewal_placement:'續約歸屬獎金'};
+  const types={direct_full:'直接推薦獎金',direct_split:'直接推薦獎金',first_two_passup:'推薦承接獎金',renewal_referral:'續約推薦獎金',renewal_placement:'續約歸屬獎金',legacy_manual_direct:'歷史推薦獎金（人工補登）'};
   const status=value=>statusNames[value]||'狀態待核對';
   const needsReview=value=>!['payable','paid'].includes(value);
   function addCard(box,title,value){const card=make('div',null,'dealer-account-card');card.append(make('small',title),make('strong',value));box.append(card);}
@@ -23,11 +23,13 @@
     addCard(summary,'已確認且目前已收款成交',`${perf.paidCount} 筆`);
     addCard(summary,'已確認成交金額（含稅）',money(perf.paidAmount));
     addCard(summary,'待確認推薦快照（依建立月）',`${perf.pendingCount} 筆`);
+    addCard(summary,'歷史補登業績（待對帳）',`${perf.historicPendingCount||0} 筆`);
     addCard(summary,'獎金待核對',money(totals.review_required));
     addCard(summary,'獎金凍結中',money(totals.frozen));
     addCard(summary,'獎金可給付',money(totals.payable));
     addCard(summary,'獎金系統標記已付款',money(totals.paid));
-    container.append(summary,make('p','業績以已確認推薦成交為準；待確認數僅含已建立推薦快照的訂單。獎金依既有流水狀態顯示，付款狀態不代表銀行匯款憑證。','dealer-account-note'));
+    container.append(summary,make('p','業績以已確認推薦成交為準；待確認數僅含已建立推薦快照的訂單。歷史補登為管理者提供的舊資料，待對帳且不列入新制確認成交。獎金依流水狀態顯示，付款狀態不代表銀行匯款憑證。','dealer-account-note'));
+    if(perf.historicPendingCount)container.append(make('p','歷史補登資料尚待對帳，未代表已付款。','dealer-account-warning'));
     const dealBox=section('我的推薦業績');
     if(!perf.rows.length)dealBox.append(make('p','此期間沒有已確認的推薦成交。','dealer-account-note'));
     for(const row of perf.rows){
