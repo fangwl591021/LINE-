@@ -55,7 +55,7 @@ test('full-width home overrides the shared frame without changing the opt-in V2 
   assert.match(rule('.home-discovery-brand small'), /white-space:\s*normal/);
   assert.match(rule('#home-primary-shortcuts'), /padding:\s*7px/);
   assert.match(rule('.home-lower-panel'), /padding:\s*12px/);
-  assert.match(rule('#home-mall-banner img'), /aspect-ratio:\s*3\/1;object-fit:\s*cover/);
+  assert.match(rule('#home-mall-banner img'), /width:\s*100%;height:\s*100%;aspect-ratio:\s*auto;object-fit:\s*cover/);
   for (const selector of ['.home-discovery-header', '#home-profile-card>.grid', '#home-discovery-bottom']) {
     assert.match(rule(selector), /env\(safe-area-inset-left\)/);
     assert.match(rule(selector), /env\(safe-area-inset-right\)/);

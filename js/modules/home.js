@@ -1911,39 +1911,32 @@ const HomeModule = (function() {
         const box = document.getElementById('home-system-ticker');
         if (!box) return;
         const loadVersion = ++homeTickerLoadVersion_;
-        try {
-            const [tickerResult, liveResult] = await Promise.allSettled([
-                window.fetchAPI('getSystemTicker', {}, true),
-                window.fetchAPI('getSystemTickerLiveStats', {}, true)
-            ]);
-            const tickerRes = tickerResult.status === 'fulfilled' ? tickerResult.value : null;
-            const liveRes = liveResult.status === 'fulfilled' ? liveResult.value : null;
+        let configured = [], liveMessage = '', completed = 0;
+        const renderAvailable = () => {
             if (loadVersion !== homeTickerLoadVersion_) return;
-            const data = tickerRes?.data || tickerRes || {};
-            const liveData = liveRes?.data || liveRes || {};
-            const messages = [];
-
-            const fallback = String(data.text || '').trim();
-            if (data.enabled === true) {
-                const configured = Array.isArray(data.messages) ? data.messages : (fallback ? [fallback] : []);
-                configured.map(v => String(v || '').trim()).filter(Boolean).forEach(v => messages.push(v));
-            }
-
-            const liveCount = Number(liveData.todayCardCollectionCount);
-            if (liveRes && liveRes.success !== false && Number.isFinite(liveCount)) {
-                const liveMessage = String(liveData.message || `📇 今日全系統新增收藏名片 ${liveCount} 張`).trim();
-                if (liveMessage && !messages.includes(liveMessage)) messages.push(liveMessage);
-            }
-
-            if (!messages.length) {
-                await window.startHomeSystemTicker([]);
-                return;
-            }
-            window.startHomeSystemTicker(messages);
-        } catch {
-            if (loadVersion !== homeTickerLoadVersion_) return;
-            await window.startHomeSystemTicker([]);
-        }
+            const messages = [...configured];
+            if (liveMessage && !messages.includes(liveMessage)) messages.push(liveMessage);
+            // Do not clear a previously visible ticker while another source is pending.
+            if (messages.length || completed === 2) void window.startHomeSystemTicker(messages);
+        };
+        const loadPart = async (action, accept) => {
+            try {
+                const res = await window.fetchAPI(action, {}, true);
+                if (loadVersion === homeTickerLoadVersion_ && res && res.success !== false) accept(res.data || res);
+            } catch { /* The other source can still be shown. */ }
+            finally { completed++; renderAvailable(); }
+        };
+        await Promise.all([
+            loadPart('getSystemTicker', data => {
+                const fallback = String(data.text || '').trim();
+                const values = Array.isArray(data.messages) ? data.messages : (fallback ? [fallback] : []);
+                if (data.enabled === true) configured = values.map(v => String(v || '').trim()).filter(Boolean);
+            }),
+            loadPart('getSystemTickerLiveStats', data => {
+                const count = Number(data.todayCardCollectionCount);
+                if (Number.isFinite(count)) liveMessage = String(data.message || `📇 今日全系統新增收藏名片 ${count} 張`).trim();
+            })
+        ]);
     };
     window.renderHomeAnnouncements = function(items) {
         const list = document.getElementById('home-announcements-list');
@@ -3224,7 +3217,7 @@ const HomeModule = (function() {
             const promise = Promise.resolve()
                 .then(() => {
                     // Keep the aggregate first; let delayed secondary work yield to input/paint.
-                    if (key === 'subsite-home-fast' || key === 'home-activities') return;
+                    if (key === 'home-system-ticker' || key === 'subsite-home-fast' || key === 'home-activities') return;
                     return new Promise(resolve => {
                         if (typeof window.requestIdleCallback === 'function') {
                             window.requestIdleCallback(() => resolve(), { timeout: 1000 });
@@ -3335,6 +3328,9 @@ const HomeModule = (function() {
         const role = getHomeLoadRole_();
         const force = options.force === true;
 
+        runHomeBackgroundTask_('home-system-ticker', 0, async () => {
+            if (typeof window.loadHomeSystemTicker === 'function') await window.loadHomeSystemTicker();
+        });
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
         if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
 
@@ -3351,10 +3347,6 @@ const HomeModule = (function() {
 
         runHomeBackgroundTask_('home-ai-match-interest', 5000, async () => {
             await window.loadHomeAiMatchInterestSummary?.();
-        });
-
-        runHomeBackgroundTask_('home-system-ticker', 7000, async () => {
-            if (typeof window.loadHomeSystemTicker === 'function') await window.loadHomeSystemTicker();
         });
 
         runHomeBackgroundTask_('home-recurring-tasks', 9000, async () => {
