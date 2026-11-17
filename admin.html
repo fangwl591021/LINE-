@@ -3837,7 +3837,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const order = getLatestBonusOrder(user);
       const statusMeta = getCrmStatusMeta(getCrmStatus(user));
       const intentMeta = getIntentMeta(user.intentLevel || user.crmIntent);
-      const role = getRoleLabel(getSafeUserRole(user));
+      const role = user.dualAdmin === true ? '總管・雙向完整版' : getRoleLabel(getSafeUserRole(user));
       const directCount = getDirectDownlineCount(user);
       const placementCount = getPlacementChildCount(user);
       const dealerProfile = readDealerProfile(user);
@@ -5808,7 +5808,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         const check = await withAdminDeadline(() => fetchAPI('checkUser', { userId: adminProfile.userId }, { timeoutMs: 15000, silent: true }), '管理權限驗證');
         if (!check) throw new Error('暫時無法確認管理權限，請重新嘗試');
 
-        if (check && isHardAdminAccount(adminProfile.userId, check.info || adminProfile)) {
+        if (check && (isHardAdminAccount(adminProfile.userId, check.info || adminProfile) ||
+          (check.info?.verifiedDualAdmin === true && check.info?.requestedUserId === adminProfile.userId))) {
           check.info = check.info || {};
           check.info.role = 'admin';
           check.info.networkId = check.info.networkId || 'admin';

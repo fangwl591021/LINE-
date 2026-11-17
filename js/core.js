@@ -279,6 +279,8 @@ const Core = (function() {
         const rewardOnly = rewardRole === 'reward' || rewardRole === '贈點用戶';
         const redeemOnly = rewardRole === 'redeem' || rewardRole === '扣點用戶';
         if (rewardOnly || redeemOnly) window.userRole = window.currentUser?.role || window.userRole;
+        if (!rewardOnly && !redeemOnly && window.currentUser?.verifiedDualAdmin === true &&
+            window.currentUser?.requestedUserId === window.currentUserProfile?.userId) window.userRole = 'admin';
         if (!rewardOnly && !redeemOnly && typeof window.isHardAdminUser === 'function') {
             const currentId = window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '';
             if (window.isHardAdminUser(currentId, window.currentUser || {})) {
