@@ -24,6 +24,10 @@ test('summary masks accounts and clearly flags unreviewed signed information',as
  ui.elements.export.fire('click');await until(()=>ui.files.length===1);assert.match(await ui.files[0].text(),/未能對應會員（請查看明細）/);
  ui.elements.search.value='范';ui.elements.search.fire('input',{isComposing:true});await until(()=>ui.calls.some(c=>c.url.searchParams.get('q')==='范'));
 });
+test('historical dealers are visible in overview even when bank information is missing',async()=>{
+ const ui=setup(()=>({success:true,pageSize:30,total:1,rows:[member('m',{memberName:'合成經銷商',historicalRoster:1,bank:null,bankStatus:'missing',bankWarning:'尚無手簽合約',awardCount:0})],legacySource:true,unresolved:{awards:0,payments:0}}));
+ ui.window.loadAdminCommissionLedger();await until(()=>ui.elements.body.innerHTML.includes('合成經銷商'));assert.match(ui.elements.body.innerHTML,/管理員確認的歷史經銷商/);assert.match(ui.elements.body.innerHTML,/尚無手簽合約/);
+});
 test('summary export includes all pages and preserves full bank strings while escaping formulas',async()=>{
  const ui=setup(url=>({success:true,pageSize:1,total:2,rows:[member('m'+url.searchParams.get('page'),{memberName:url.searchParams.get('page')==='1'?'=danger':'第二位'})],legacySource:true,unresolved:{awards:0,payments:0}}));
  ui.window.loadAdminCommissionLedger();await until(()=>!ui.elements.export.disabled&&ui.calls.length);ui.elements.export.fire('click');await until(()=>ui.files.length===1);
