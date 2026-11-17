@@ -32,7 +32,7 @@
  function table(){
   const summary=state.mode==='summary',awards=state.mode==='awards';
   const headings=summary?['會員','手簽收款資料','手簽狀態','流水筆數',...states.map(label),'其他狀態','已登錄銀行付款','舊月結已付標記','明細']:
-   awards?['會員','業績歸屬月','獎金類型','金額','狀態','訂單編號','流水編號','建立時間','結算時間']:['會員','付款時間','來源','金額','銀行付款憑證','帳單／批次','登錄時間'];
+   awards?['傭金領取者','購買人','業績歸屬月','獎金類型','金額','狀態','訂單編號','流水編號','建立時間','結算時間']:['會員','付款時間','來源','金額','銀行付款憑證','帳單／批次','登錄時間'];
   el('head').innerHTML='<tr>'+headings.map(x=>'<th class="px-3 py-3 whitespace-nowrap">'+esc(x)+'</th>').join('')+'</tr>';
   if(!state.rows.length){el('body').innerHTML=`<tr><td colspan="${headings.length}" class="p-8 text-center text-slate-500">目前沒有符合條件的資料。</td></tr>`;return;}
   el('body').innerHTML=state.rows.map((row,index)=>{
@@ -41,7 +41,7 @@
     const bank=row.bank?`${esc(row.bank.name)} ${esc(row.bank.code)} ${esc(row.bank.branch)}<br>戶名：${esc(row.bank.holder)}<br>帳號：<span data-bank-value="${index}">${esc('末 '+row.bank.account.slice(-4)+' 碼')}</span> <button type="button" data-reveal="${index}" class="text-blue-700 underline">顯示完整帳號</button>`:'尚無可用收款資料';
     const bankStatus=row.bankStatus==='accepted'?'<span class="text-emerald-700">已審核</span>':`<span class="text-red-700 font-bold">${esc(row.bankWarning||'資料需核對')}</span>`;
     cells=[`<strong>${esc(row.memberName||'未能唯一辨識會員')}</strong>${!row.memberName&&row.applicationName?`<br><span class="text-xs text-red-700">申請書姓名：${esc(row.applicationName)}（身分待核）</span>`:''}<br><span class="text-xs text-slate-500">會員編號：${esc(row.memberNumber||'未登錄')}<br>${esc(row.memberId)}</span>`,bank+`<br><span class="text-xs text-slate-500">簽署：${esc(formatTime(row.bankSignedAt))}</span>`,bankStatus,esc(row.awardCount),...states.map(s=>esc(money(row.statusAmounts?.[s]??0))),esc(money(otherAmount(row))),`${esc(row.paymentCount)} 筆<br>NT$ ${esc(money(row.paymentAmount))}`,`${esc(row.legacyPaymentCount)} 批<br>NT$ ${esc(money(row.legacyPaymentAmount))}`,`<button type="button" data-awards="${index}" class="text-blue-700 underline">傭金明細</button><br><button type="button" data-payments="${index}" class="text-blue-700 underline mt-2">匯款紀錄</button>`];
-   }else if(awards)cells=[esc(row.memberName||state.memberName||row.memberId||'未能辨識會員'),esc(row.performanceMonth||'待核對'),esc(bonusType(row.bonusType)),esc(money(row.amount)),esc(label(row.status)),esc(row.orderId),esc(row.txId),esc(formatTime(row.createdAt)),esc(formatTime(row.settledAt))];
+   }else if(awards)cells=[esc(row.memberName||state.memberName||row.memberId||'未能辨識會員'),esc(row.buyerName||'未記錄'),esc(row.performanceMonth||'待核對'),esc(bonusType(row.bonusType)),esc(money(row.amount)),esc(label(row.status)),esc(row.orderId),esc(row.txId),esc(formatTime(row.createdAt)),esc(formatTime(row.settledAt))];
    else cells=[esc(row.memberName||state.memberName||row.memberId||'未能辨識會員'),esc(formatTime(row.paidAt)),esc(row.source==='confirmed'?'已登錄銀行付款':'舊月結已付標記（無銀行憑證）'),esc(money(row.amount)),esc(row.paymentRef||'未提供'),esc(row.statementId),esc(formatTime(row.recordedAt))];
    return '<tr>'+cells.map(c=>'<td class="px-3 py-3 align-top whitespace-nowrap">'+c+'</td>').join('')+'</tr>';
   }).join('');
@@ -68,7 +68,7 @@
     records=rows.map(r=>[r.memberName,r.memberNumber,r.memberId,r.applicationName,r.applicationUnit,r.bank?.name,r.bank?.code,r.bank?.branch,r.bank?.holder,r.bank?.account,reviewLabel(r.bankReview),r.bankWarning,formatTime(r.bankSignedAt),r.bankApplicationId,Number(r.awardCount),...states.map(s=>Number(r.statusAmounts?.[s]??0)),otherAmount(r),Number(r.paymentCount),Number(r.paymentAmount),Number(r.legacyPaymentCount),Number(r.legacyPaymentAmount)]);
     if(unresolved?.awards||unresolved?.payments){const warning=Array(headers.length).fill('');warning[0]='未能對應會員（請查看明細）';warning[11]=`全站另有 ${Number(unresolved.awards||0)} 筆傭金、${Number(unresolved.payments||0)} 筆付款需核對`;warning[14]=Number(unresolved.awards||0);records.push(warning);}
    }else if(mode==='awards'){
-    headers=['會員','會員編號','會員識別碼','業績歸屬月份','獎金類型','金額','狀態','訂單編號','流水編號','建立時間','結算時間'];records=rows.map(r=>[r.memberName||memberName,r.memberNumber,r.memberId,r.performanceMonth,bonusType(r.bonusType),Number(r.amount),label(r.status),r.orderId,r.txId,formatTime(r.createdAt),formatTime(r.settledAt)]);
+    headers=['傭金領取者','會員編號','會員識別碼','購買人','業績歸屬月份','獎金類型','金額','狀態','訂單編號','流水編號','建立時間','結算時間'];records=rows.map(r=>[r.memberName||memberName,r.memberNumber,r.memberId,r.buyerName,r.performanceMonth,bonusType(r.bonusType),Number(r.amount),label(r.status),r.orderId,r.txId,formatTime(r.createdAt),formatTime(r.settledAt)]);
    }else{
     headers=['會員','會員編號','會員識別碼','付款時間','來源','金額','銀行付款憑證','帳單／批次編號','登錄時間'];records=rows.map(r=>[r.memberName||memberName,r.memberNumber,r.memberId,formatTime(r.paidAt),r.source==='confirmed'?'已登錄銀行付款':'舊月結已付標記（無銀行憑證）',Number(r.amount),r.paymentRef,r.statementId,formatTime(r.recordedAt)]);
    }

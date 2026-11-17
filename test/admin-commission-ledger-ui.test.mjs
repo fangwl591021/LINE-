@@ -36,9 +36,9 @@ test('member payment view labels bank evidence and old settlement separately',as
  assert.match(ui.elements.body.innerHTML,/已登錄銀行付款/);assert.match(ui.elements.body.innerHTML,/舊月結已付標記（無銀行憑證）/);
 });
 test('historic award is labeled and exported as pending historical income',async()=>{
- const ui=setup(url=>url.searchParams.get('mode')==='awards'?{success:true,pageSize:60,total:1,legacySource:true,rows:[{memberId:'m',memberName:'合成會員',txId:'historic',orderId:'order',performanceMonth:'2026-05',bonusType:'legacy_manual_direct',amount:1500,status:'review_required'}]}:{success:true,pageSize:30,total:1,legacySource:true,rows:[member('m')]});
+ const ui=setup(url=>url.searchParams.get('mode')==='awards'?{success:true,pageSize:60,total:1,legacySource:true,rows:[{memberId:'m',memberName:'合成會員',buyerName:'合成購買人',txId:'historic',orderId:'order',performanceMonth:'2026-05',bonusType:'legacy_manual_direct',amount:1500,status:'review_required'}]}:{success:true,pageSize:30,total:1,legacySource:true,rows:[member('m')]});
  ui.window.loadAdminCommissionLedger();await until(()=>ui.elements.body.innerHTML.includes('傭金明細'));ui.elements.awards.fire('click');await until(()=>ui.elements.body.innerHTML.includes('歷史推薦獎金'));
- assert.match(ui.elements.body.innerHTML,/2026-05/);assert.match(ui.elements.body.innerHTML,/待核對/);ui.elements.export.fire('click');await until(()=>ui.files.length===1);assert.match(await ui.files[0].text(),/歷史推薦獎金（人工補登）/);
+ assert.match(ui.elements.body.innerHTML,/2026-05/);assert.match(ui.elements.body.innerHTML,/合成購買人/);assert.match(ui.elements.body.innerHTML,/待核對/);ui.elements.export.fire('click');await until(()=>ui.files.length===1);assert.match(await ui.files[0].text(),/歷史推薦獎金（人工補登）/);assert.match(await ui.files[0].text(),/合成購買人/);
 });
 test('all-member payment export keeps multiple beneficiaries in the same legacy batch',async()=>{
  const ui=setup(url=>{const mode=url.searchParams.get('mode'),page=Number(url.searchParams.get('page'));return mode==='payments'?{success:true,pageSize:1,total:2,legacySource:true,rows:[{memberId:'m'+page,memberName:'會員'+page,paymentId:'same-batch',statementId:'same-batch',amount:100,source:'legacy_marked'}]}:{success:true,pageSize:30,total:1,legacySource:true,rows:[member('m')]}});
