@@ -350,6 +350,7 @@
       font-size: 14px;
       font-weight: 500;
     }
+    .crm-role-select-dual { min-width: 180px; }
     .crm-action-stack {
       display: flex;
       justify-content: flex-end;
@@ -4104,7 +4105,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         const status = String(getCrmStatus(u) || '').toLowerCase();
         const role = getSafeUserRole(u);
         if (filters.status && filters.status !== 'all' && status !== filters.status) return false;
-        if (filters.role && filters.role !== 'all' && role !== filters.role) return false;
+        if (filters.role && filters.role !== 'all' && role !== filters.role && !(filters.role === 'admin' && role === 'store' && u.dualAdmin === true)) return false;
         if (filters.fee === 'paid' && !hasAnnualFeeActive(u)) return false;
         if (filters.fee === 'unpaid' && hasAnnualFeeActive(u)) return false;
         if (filters.fee === 'due' && !isFollowUpDue(u)) return false;
@@ -4276,7 +4277,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           </td>
           <td>
             <span class="crm-pill ${role === 'admin' ? 'crm-pill-purple' : (role === 'store' || role === 'tenant' ? 'crm-pill-green' : 'crm-pill-blue')}">
-              ${escapeHTML(getRoleLabel(role))}
+              ${escapeHTML(u.dualAdmin === true && role === 'store' ? '總管・雙向完整版' : getRoleLabel(role))}
             </span>
             <div class="crm-detail-list mt-3">
               <div class="crm-detail-row"><span class="crm-detail-label">歸屬</span><span class="crm-detail-value">${escapeHTML(u.networkId || u.storeId || 'admin')}</span></div>
@@ -4311,10 +4312,10 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
               ${role==='reward'&&adminRole==='admin'?`<button type="button" onclick="window.openRewardUnitEditor('${escapeHTML(id)}')" class="crm-action-btn">贈點單位上架</button>`:''}
               ${adminRole==='admin'?`<button type="button" onclick="window.openRewardApplicationReview('${escapeHTML(id)}')" class="crm-action-btn">申請與合約</button>`:''}
               ${adminRole==='admin'?`<button type="button" onclick="window.openPartnerContracts('${escapeHTML(id)}')" class="crm-action-btn">共創制度</button>`:''}
-              <select onchange="updateRole('${escapeHTML(id)}', this.value, this)" ${adminRole !== 'admin' || isHardAdminAccount(id, u) ? 'disabled' : ''} class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
+              <select onchange="updateRole('${escapeHTML(id)}', this.value, this)" ${adminRole !== 'admin' || isHardAdminAccount(id, u) ? 'disabled' : ''} class="crm-role-select ${u.dualAdmin === true && role === 'store' ? 'crm-role-select-dual' : ''} outline-none focus:ring-2 focus:ring-blue-500">
                 ${role === 'admin' || role === 'tenant' ? `<option value="${role}" selected>${escapeHTML(getRoleLabel(role))}</option>` : ''}
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
-                <option value="store" ${role==='store'?'selected':''}>雙向完整版</option>
+                <option value="store" ${role==='store'?'selected':''}>${u.dualAdmin === true && role === 'store' ? '總管・雙向完整版' : '雙向完整版'}</option>
                 <option value="reward" ${role==='reward'?'selected':''}>贈點用戶</option>
                 <option value="redeem" ${role==='redeem'?'selected':''}>扣點用戶</option>
               </select>
