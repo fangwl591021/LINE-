@@ -18,14 +18,14 @@ function fixture(reduced=false){
  vm.runInNewContext(script,context);
  return {slides,dots,toggle,controls,home,document,tick(){for(const fn of [...intervals.values()])fn()},get active(){return slides.findIndex(s=>!s.hidden)},get intervalCount(){return intervals.size}};
 }
-test('homepage retains the shop entry and includes all six original images in a fixed-height frame',()=>{
+test('homepage retains the shop entry and includes all six peach images in a fixed-height frame',()=>{
  assert.match(html,/id="home-mall-banner"[^>]*onclick="window\.openHomeShopCategory\(''\)"/);
  assert.equal((html.match(/class="home-promo-slide" type="button" onclick="window\.openHomeShopCategory\(''\)"/g)||[]).length,7);
  assert.match(css,/\.home-promo-frame\s*\{[^}]*aspect-ratio:1670\/942/);
  assert.match(css,/\.home-promo-controls\s*\{[^}]*position:absolute;[^}]*bottom:4px/);
  assert.match(css,/\.home-promo-frame #home-mall-banner\s*\{[^}]*width:100%;height:100%/);
  assert.match(css,/#home-mall-banner img\s*\{[^}]*height:100%;aspect-ratio:auto;object-fit:cover/);
- for(let i=1;i<=6;i++){const name=`home-promo-20261116-0${i}.jpg`;assert(html.includes(name));assert(existsSync(new URL('../assets/'+name,import.meta.url)));}
+ for(let i=1;i<=6;i++){const name=`home-promo-peach-20261118-0${i}.jpg`;assert(html.includes(name));assert(existsSync(new URL('../assets/'+name,import.meta.url)));}
 });
 test('carousel advances every three seconds, skips background pages, and can be controlled',()=>{
  const f=fixture();assert.equal(f.active,0);assert.equal(f.controls.hidden,false);assert.equal(f.intervalCount,1);
