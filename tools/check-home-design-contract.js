@@ -98,8 +98,9 @@ const systemTicker = index.indexOf('id="home-system-ticker"');
 const memberStrip = index.indexOf('id="home-profile-card"');
 const primaryShortcuts = index.indexOf('id="home-primary-shortcuts"');
 const recurringTasks = index.indexOf('id="home-recurring-task-panel"');
-if (!(memberStrip >= 0 && memberStrip < systemTicker && systemTicker < primaryShortcuts)) {
-  fail('system ticker must appear between the green member strip and primary shortcuts');
+const promoCarousel = index.indexOf('id="home-promo-carousel"');
+if (!(memberStrip >= 0 && memberStrip < primaryShortcuts && primaryShortcuts < promoCarousel && promoCarousel < systemTicker && systemTicker < recurringTasks)) {
+  fail('system ticker must follow the promo carousel and precede recurring tasks');
 }
 const mallBanner = index.indexOf('id="home-mall-banner"');
 if (!(mallBanner > quickActionsEnd && mallBanner < defaultSearchEntry)) {
