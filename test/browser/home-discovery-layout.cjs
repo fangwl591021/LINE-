@@ -21,6 +21,15 @@ const {createHash}=require('node:crypto'),staticCache=path.resolve(__dirname,'..
    await page.goto('http://127.0.0.1:8776/?role=user',{waitUntil:'domcontentloaded',timeout:15000});
    await page.waitForFunction(()=>getComputedStyle(document.getElementById('home-discovery-header')).display==='flex'&&document.getElementById('home-my-card-button').getBoundingClientRect().height>=44);
    await page.addScriptTag({content:fs.readFileSync('js/modules/home-discovery-20261110.js','utf8')});
+   const tickerOrder=await page.evaluate(()=>{
+    const ticker=document.getElementById('home-system-ticker');ticker.classList.remove('hidden');
+    document.getElementById('home-system-ticker-text').textContent='首頁公告';
+    const carousel=document.getElementById('home-promo-carousel').getBoundingClientRect();
+    const announcement=ticker.getBoundingClientRect(),categories=document.getElementById('home-shop-categories').getBoundingClientRect();
+    return {carouselBottom:carousel.bottom,tickerTop:announcement.top,tickerBottom:announcement.bottom,categoriesTop:categories.top};
+   });
+   assert.ok(tickerOrder.carouselBottom<=tickerOrder.tickerTop,'ticker follows the carousel');
+   assert.ok(tickerOrder.tickerBottom<=tickerOrder.categoriesTop,'categories follow the ticker');
    const state=await page.evaluate(()=>{
     window.demo=[];window.openStoreShop=(...args)=>window.demo.push(args);window.openPointsWallet=()=>window.demo.push('wallet');
     window.openHomeShopCategory('食');window.openHomeShopCategory('未知');window.userRole='user';window.openHomePointAction();window.userRole='store';window.openHomePointAction();
