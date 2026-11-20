@@ -1424,6 +1424,7 @@ window.applyRegisteredUserSession = function(info, options = {}) {
   if (!info) return;
 
   window.currentUser = { ...info };
+  window.renderProfileMemberNumber?.();
   const rewardOnlyRole = ['reward', '贈點用戶', 'redeem', '扣點用戶'].includes(String(window.currentUser.role || '').trim().toLowerCase());
   if (!rewardOnlyRole && typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId, window.currentUser)) {
     window.currentUser.role = 'admin';

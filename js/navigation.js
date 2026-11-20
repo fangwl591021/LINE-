@@ -27,6 +27,15 @@ window.refreshBusinessCardCameraInputs = function(scope) {
     mountNativeBusinessCardCameraInput('my-card-camera-label', 'myCameraInput', 'recognizeMyCard');
   }
 };
+window.renderProfileMemberNumber = function() {
+  const target = document.getElementById('profile-member-number');
+  if (!target) return;
+  const actor = String(window.currentUserProfile?.userId || '').trim();
+  const user = window.currentUser;
+  const owner = String(user?.requestedUserId || user?.userId || user?.lineId || '').trim();
+  const number = String(user?.memberNumber || '').trim();
+  target.textContent = actor && owner === actor && /^\d{11,}$/.test(number) ? number : '尚未取得會員編號';
+};
 window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   if (window.currentPage === 'business-island' && page !== 'business-island' && typeof window.leaveBusinessIsland === 'function') window.leaveBusinessIsland();
@@ -47,6 +56,7 @@ window.goPage = function(page, isInitLoad = false) {
 
   if (page === 'card') window.refreshBusinessCardCameraInputs('collected');
   else if (page === 'admin-settings') window.refreshBusinessCardCameraInputs('mycard');
+  if (page === 'admin-settings') window.renderProfileMemberNumber();
 
   if (!isInitLoad) {
     if (page === 'admin-activities') window.loadAdminActivities();
