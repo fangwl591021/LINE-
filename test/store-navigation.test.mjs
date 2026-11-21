@@ -55,7 +55,7 @@ test('normalized tenant, missing capability and mismatched profile cannot open s
   {userRole:'store',currentUser:{retailSellerEligible:true},currentUserProfile:{}},
   {userRole:'store',currentUserProfile:{userId:'owner'}}
  ])assert.equal(vm.runInNewContext(gate,{window,standalone:false}),false);
- const manage=source.slice(source.indexOf('    async function manage()'),source.indexOf('    function edit('));
+ const manage=source.slice(source.indexOf('    async function manage('),source.indexOf('    function edit('));
  for(const allowed of [false,true]){
   const calls=[],context={canManage:()=>allowed,pageKind(){calls.push('page');},epoch:0,alert:{},content:{innerHTML:''},window:{currentUserProfile:{userId:'owner'},liff:{getAccessToken:()=> 'token'},userRole:'store'},cardImportAdminOwner:null,canAdmin:()=>false,api:async()=>{calls.push('api');return {};},root:{isConnected:true},setManagement(){},renderManage(){}};
   if(!allowed)await assert.rejects(vm.runInNewContext(manage+';manage()',context),/加入會員不會自動取得上架資格/);
