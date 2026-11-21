@@ -3366,7 +3366,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       await window.openStoreShop('', '', '', 'mine', '', {applicationReview:reviewEntry});return;
     }
     const cashierEntryConflict = shopSection === 'cashier' && ['checkin','nfcAct','nfcCheckin','verifyCheckin','checkinRowId','registrationId'].some(key => urlParams.get(key));
-    if (['list','mine','manage','sales','online-manage','cashier'].includes(shopSection) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
+    const directSingleProduct = shopSection === 'new-product' && directStoreManage;
+    if ((directSingleProduct || ['list','mine','manage','sales','online-manage','cashier'].includes(shopSection)) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
       await window.openStoreShop('', '', '', shopSection);
       return;
     }

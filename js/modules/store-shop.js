@@ -579,19 +579,39 @@
         void checkOnlineWarnings();
       }
     }
-    async function manage() {
+    async function manage({openSingleProduct=false}={}) {
       if(!canManage())throw new Error('商品上架與商店設定僅開放扣點店家、雙向店家及總管；加入會員不會自動取得上架資格。贈點單位請使用贈點工作台。');
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
       cardImportAdminOwner=null;
       const firstSetup=canAdmin()||['store','店長'].includes(String(window.userRole||'').toLowerCase());
-      const result=await api(firstSetup?'/manage?card_prefill=1':'/manage',null,true);
-      if(version!==epoch||!root.isConnected||owner!==window.currentUserProfile?.userId||token!==window.liff?.getAccessToken?.())return;
+      const path=openSingleProduct?'/manage?oa_upload=1':firstSetup?'/manage?card_prefill=1':'/manage';
+      const result=await api(path,null,true);
+      if(version!==epoch||!root.isConnected||owner!==window.currentUserProfile?.userId||token!==window.liff?.getAccessToken?.()||(openSingleProduct&&window.currentPage!=='store-shop'))return;
+      if(openSingleProduct&&!['full','pilot'].includes(result.oa_upload_mode)){
+        content.replaceChildren();
+        throw new Error('這個帳號尚未開放 LINE 單件商品上傳。');
+      }
       cardImportAdminOwner=result.can_import_own_card===true&&canAdmin()?owner:null;
-      setManagement(result); renderManage(result.card_prefill,result.card_prefill_unavailable);
+      setManagement(result);
+      if(openSingleProduct&&result.oa_upload_mode==='pilot'){
+        content.innerHTML=`<h2>單件商品測試</h2><p>${esc(shop.name)}｜只儲存草稿</p><div class="shop-editor"></div>`;
+        if(result.oa_upload_complete){
+          content.querySelector('.shop-editor').textContent='這次測試的商品草稿已儲存。';
+          return;
+        }
+        edit({status:'draft'},'pilot');
+        return;
+      }
+      renderManage(result.card_prefill,result.card_prefill_unavailable);
+      if(openSingleProduct){
+        if(!shop)throw new Error('請先儲存店面，再新增商品。');
+        if(managedShops.length>1)throw new Error('請先選擇要管理的店家，再按「新增商品」。');
+        edit({status:'draft'},'full');
+      }
     }
-    function edit(p={}) {
+    function edit(p={},oaUploadMode='') {
       if(!p.id&&atCapacity())throw new Error(`已達本方案 ${productLimit} 件商品上限，請先封存原商品再新增。`);
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
       const chooseRedemption=redeemProductPlan()&&!p.id;
@@ -607,7 +627,10 @@
         editor.querySelector('h2').insertAdjacentHTML('afterend',`<p class="shop-setup-warning" data-redeem-setup-note>${p.id&&p.redeem_type==='none'?'目前尚未設定購物金折抵。請選擇指定點數、百分比或全額折抵，再儲存上架。':chooseRedemption?'請自行選擇銷售方式與折抵方式，並填寫折抵上限；儲存後才會生效。':'折抵店家上架商品必須提供購物金折抵；不折抵僅可存草稿。'}${p.id&&p.purchase_mode==='in_store'?' 目前為店內消費折抵；如需網購，請改選「線上購買與折抵」後儲存。':''}</p>`);
       }
       if(!p.id)editor.querySelector('h2').insertAdjacentHTML('afterend','<button type="button" data-do="dm-import" class="primary">上傳 DM・AI 辨識建商品</button><p class="shop-meta">DM 送至 AI 擷取商品資料，先帶入表單、核對後再儲存。不自動上架。</p>');
-      editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
+      const form=editor.querySelector('form');
+      form.dataset.requestKey=crypto.randomUUID();
+      if(oaUploadMode)form.dataset.oaUpload=oaUploadMode;
+      if(oaUploadMode==='pilot')form.elements.status.replaceChildren(new Option('草稿','draft'));
       editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',`<p class="shop-meta">${listingNotice}</p>`);
       if(canTransact()) {
         editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',onlineWarningBox('product'));
@@ -921,7 +944,14 @@
             data.shipping_fee_cents=data.shipping_fee===''?null:Math.round(Number(data.shipping_fee)*100);delete data.shipping_fee;
             data.price_cents=Math.round(Number(data.price)*100); delete data.price;
             data.redeem_value=Number(data.redeem_value);
-            const result=await api('/product',data); setManagement(result); renderManage();
+            const result=form.dataset.oaUpload?await api('/product?oa_upload=1',data):await api('/product',data);
+            setManagement(result);
+            if(form.dataset.oaUpload==='pilot'){
+              const success=document.createElement('p');
+              success.setAttribute('role','status');
+              success.textContent='單件商品測試完成，草稿已儲存。';
+              form.replaceWith(success);
+            }else renderManage();
           }
           alert.textContent=hasPendingImage?(data.status==='draft'?'圖片已儲存為草稿，尚未公開；本次沒有扣除點數。':'已儲存，圖片已更新；本次沒有扣除點數。'):'已儲存；本次沒有扣除點數。';
           if(hasPendingImage&&form.dataset.form==='store')content.querySelector('[data-form="store"] .shop-image-status').textContent=data.status==='draft'?'圖片已儲存為草稿，尚未公開。':'圖片已儲存；重新開啟店面與店家列表會顯示此圖。';
@@ -965,6 +995,8 @@
         const version=++epoch;
         const module=await import('./shop-product-checkout.js?v=2');
         if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch,qrToken);
+      }else if(!standalone&&section==='new-product'){
+        await manage({openSingleProduct:true});
       }else if(!standalone&&['manage','sales','online-manage'].includes(section)){
         await manage();
         if(window.currentPage!=='store-shop'||!root.isConnected)return;
