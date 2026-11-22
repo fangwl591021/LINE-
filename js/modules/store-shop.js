@@ -661,7 +661,7 @@
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
       const chooseRedemption=redeemProductPlan()&&!p.id;
       editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${input('shipping_fee','商品運費（NT$；0 免運，留白沿用店家運費）',p.shipping_fee_cents==null?'':p.shipping_fee_cents/100,20,false,'number')}<p class="shop-meta">同一家店每筆訂單計一次運費；本次選購商品運費設定不一致時，請統一設定後才能結帳。運費不折抵，新設定不影響舊訂單。</p>${select('redeem_type','點數折抵政策',canTransact()?[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]:[['none','不折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',canTransact()?(p.redeem_value||0):0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'active')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
-      editor.scrollIntoView({block:'start',behavior:'smooth'});
+      editor.scrollIntoView({block:'start',behavior:oaUploadMode==='full'?'instant':'smooth'});
       editor.querySelector('[name="description"]').closest('label').insertAdjacentHTML('beforebegin',select('category','商品分類',[['','未分類'],...categories.map(c=>[c,c])],p.category||''));
       editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',canTransact()?[...(chooseRedemption?[['','請選擇銷售方式']]:[]),['in_store',redeemProductPlan()?'店內消費折抵':'限店內'],['online',redeemProductPlan()?'線上購買與折抵':'網購']]:[['in_store','限店內']],chooseRedemption?'':p.purchase_mode||'in_store'));
       if(redeemProductPlan()) {
@@ -1051,7 +1051,6 @@
               String(error.code).startsWith('LISTING_IMAGE_')?[{field:'image',reason:error.message}]:[];
             if(issues.length)oaDraftIssues[form.dataset.id]=issues;
             showOaDraftIssues(form,issues);
-            if(submit&&issues.length)submit.textContent='重新送審';
             formMessage.textContent=issues.length?'草稿已儲存。請修改標出的項目，再送出審核。':'草稿已儲存。'+error.message;
             alert.textContent=formMessage.textContent;
             formMessage.scrollIntoView({block:'center'});
