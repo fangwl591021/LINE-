@@ -89,11 +89,13 @@
     const rewardOnly=()=>['reward','贈點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRewardOnlyPointCashier?.();
     const redeemOnly=()=>['redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRedeemOnlyPointCashier?.();
     let merchantView,clearHomeWallet,cooperationPlan,cardImportAdminOwner;
+    let fullOaProducts=false,oaDraftIssues={};
     const redeemProductPlan=()=>cooperationPlan?.id?cooperationPlan.id==='redeem':redeemOnly();
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
       shop=result.shop;items=result.products;productLimit=result.product_limit;productCount=result.product_count;productNext=result.product_next||'';cooperationPlan=result.cooperation_plan||result.shop?.cooperation_plan;
       if(Array.isArray(result.managed_shops))managedShops=result.managed_shops;
+      if(result.oa_draft_issues)oaDraftIssues=result.oa_draft_issues;
       if(shop?.id)selectedManagementShop=shop.id;
     }
     function moreButton(next,privateView) {
@@ -297,7 +299,7 @@
         headers.Authorization=`Bearer ${token}`;
       }
       if(data) headers['Content-Type']='application/json';
-      const reviewing=data&&['/store','/product','/admin/catalog','/admin/products'].includes(path);
+      const reviewing=data&&(['/store','/product','/admin/catalog','/admin/products'].includes(path)||(path==='/product?oa_upload=1'&&data.status==='active'));
       const scoped=selectedManagementShop&&/^\/(?:manage|store|product|product-ocr)(?:\?|$)/.test(path);
       const salesScope=selectedManagementShop&&/^\/sales(?:\?|$)/.test(path);
       const target=path+(scoped?(path.includes('?')?'&':'?')+'shop='+encodeURIComponent(selectedManagementShop):salesScope?(path.includes('?')?'&':'?')+'managed_shop='+encodeURIComponent(selectedManagementShop):'');
@@ -585,6 +587,8 @@
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
       cardImportAdminOwner=null;
+      fullOaProducts=false;
+      oaDraftIssues={};
       const firstSetup=canAdmin()||['store','店長'].includes(String(window.userRole||'').toLowerCase());
       const path=openSingleProduct?'/manage?oa_upload=1':firstSetup?'/manage?card_prefill=1':'/manage';
       const result=await api(path,null,true);
@@ -604,19 +608,60 @@
         edit({status:'draft'},'pilot');
         return;
       }
-      renderManage(result.card_prefill,result.card_prefill_unavailable);
       if(openSingleProduct){
-        if(!shop)throw new Error('請先儲存店面，再新增商品。');
-        if(managedShops.length>1)throw new Error('請先選擇要管理的店家，再按「新增商品」。');
-        edit({status:'draft'},'full');
+        fullOaProducts=true;
+        renderFullOaProducts();
+        if(shop&&managedShops.length<=1&&!items.some(p=>p.status==='draft')&&!atCapacity())edit({status:'draft'},'full');
+        return;
       }
+      renderManage(result.card_prefill,result.card_prefill_unavailable);
+    }
+    function renderFullOaProducts() {
+      const drafts=items.filter(p=>p.status==='draft');
+      content.innerHTML=`<h2>單件商品上架</h2>
+        <button type="button" data-do="manage">返回商城管理</button>
+        ${managedShops.length>1?`<label>選擇店家<select data-manage-shop>${managedShops.map(s=>`<option value="${esc(s.id)}" ${s.id===shop?.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`:shop?`<p>${esc(shop.name)}</p>`:''}
+        ${shop?`<button type="button" data-do="oa-new" ${atCapacity()?'disabled':''}>新增單件商品</button>
+        ${shop.status!=='active'?'<p>店面尚未公開，可編輯草稿。公開店面後即可送審。</p>':''}
+        <h3>商品草稿</h3>${drafts.length?`<ul class="shop-oa-drafts">${drafts.map(p=>`<li><strong>${esc(p.title)}</strong><span>${oaDraftIssues[p.id]?.length?'待補件':'草稿'}</span><button type="button" data-do="oa-edit" data-id="${esc(p.id)}" aria-label="繼續編輯 ${esc(p.title)}">繼續編輯</button></li>`).join('')}</ul>`:'<p>目前沒有商品草稿。</p>'}`: '<p>請先在商城管理建立店面，再新增商品。</p>'}
+        <div class="shop-editor"></div>`;
+    }
+    function showOaDraftIssues(form,issues=[]) {
+      const fieldLabels={title:'商品名稱',description:'商品說明',category:'商品分類',image:'商品圖片',parent_name:'店面名稱',parent_description:'店面介紹'};
+      const panel=form.querySelector('[data-oa-review-summary]');
+      panel.replaceChildren();
+      form.querySelectorAll('[data-oa-issue]').forEach(note=>note.remove());
+      form.querySelectorAll('[data-oa-invalid]').forEach(control=>{
+        control.removeAttribute('aria-invalid');
+        control.removeAttribute('aria-describedby');
+        delete control.dataset.oaInvalid;
+      });
+      for(const [i,issue] of issues.entries()){
+        const field=issue.field;
+        const message=[fieldLabels[field]||'商品內容',issue.evidence,issue.reason].filter(Boolean).join('｜');
+        const name=field==='image'?'image_url':field;
+        const control=['title','description','category','image_url'].includes(name)?form.elements.namedItem(name):null;
+        const summary=document.createElement('li');summary.textContent=message;panel.append(summary);
+        if(!control)continue;
+        const note=document.createElement('p');
+        note.id='shop-oa-issue-'+i;note.dataset.oaIssue='';note.className='shop-setup-warning';note.textContent=message;
+        const upload=field==='image'?form.querySelector('[data-do="upload-image"]'):null;
+        (upload||control.closest('label'))?.insertAdjacentElement('afterend',note);
+        for(const target of [control,upload].filter(Boolean)){
+          target.dataset.oaInvalid='';target.setAttribute('aria-invalid','true');
+          target.setAttribute('aria-describedby',[target.getAttribute('aria-describedby'),note.id].filter(Boolean).join(' '));
+        }
+      }
+      panel.hidden=!issues.length;
+      const reviewButton=form.querySelector('[data-oa-submit-review]');
+      if(reviewButton)reviewButton.textContent=issues.length?'重新送審':'送出審核';
     }
     function edit(p={},oaUploadMode='') {
       if(!p.id&&atCapacity())throw new Error(`已達本方案 ${productLimit} 件商品上限，請先封存原商品再新增。`);
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
       const chooseRedemption=redeemProductPlan()&&!p.id;
       editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${input('shipping_fee','商品運費（NT$；0 免運，留白沿用店家運費）',p.shipping_fee_cents==null?'':p.shipping_fee_cents/100,20,false,'number')}<p class="shop-meta">同一家店每筆訂單計一次運費；本次選購商品運費設定不一致時，請統一設定後才能結帳。運費不折抵，新設定不影響舊訂單。</p>${select('redeem_type','點數折抵政策',canTransact()?[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]:[['none','不折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',canTransact()?(p.redeem_value||0):0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'active')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
-      editor.scrollIntoView({block:'start',behavior:'smooth'});
+      editor.scrollIntoView({block:'start',behavior:oaUploadMode==='full'?'instant':'smooth'});
       editor.querySelector('[name="description"]').closest('label').insertAdjacentHTML('beforebegin',select('category','商品分類',[['','未分類'],...categories.map(c=>[c,c])],p.category||''));
       editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',canTransact()?[...(chooseRedemption?[['','請選擇銷售方式']]:[]),['in_store',redeemProductPlan()?'店內消費折抵':'限店內'],['online',redeemProductPlan()?'線上購買與折抵':'網購']]:[['in_store','限店內']],chooseRedemption?'':p.purchase_mode||'in_store'));
       if(redeemProductPlan()) {
@@ -635,6 +680,15 @@
       if(canTransact()) {
         editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',onlineWarningBox('product'));
         void checkOnlineWarnings();
+      }
+      if(oaUploadMode==='full'){
+        const status=form.elements.status;
+        status.replaceChildren(new Option('草稿','draft'));
+        status.closest('label').hidden=true;
+        form.querySelector('.shop-row button.primary').textContent='儲存草稿';
+        if(shop?.status==='active')form.querySelector('.shop-row').insertAdjacentHTML('beforeend','<button type="submit" data-oa-submit-review>送出審核</button>');
+        form.querySelector('h2').insertAdjacentHTML('afterend','<ul class="shop-oa-review" data-oa-review-summary aria-label="審核補件項目" hidden></ul>');
+        showOaDraftIssues(form,oaDraftIssues[p.id]);
       }
     }
     function onlineWarningBox(scope) {
@@ -841,6 +895,12 @@
           }
           case 'new': edit(); break;
           case 'edit': edit(items.find(p=>p.id===button.dataset.id)); break;
+          case 'oa-new': edit({status:'draft'},'full'); break;
+          case 'oa-edit': {
+            const draft=items.find(p=>p.status==='draft'&&p.id===button.dataset.id);
+            if(draft)edit(draft,'full');
+            break;
+          }
           case 'cancel': content.querySelector('.shop-editor').innerHTML=''; break;
           case 'upload-image': button.closest('.shop-image-field').querySelector('input[type=file]').click(); break;
           case 'copy': await navigator.clipboard.writeText(shopLink(button.dataset.id)); alert.textContent='已複製商城網址'; break;
@@ -854,7 +914,7 @@
     let productUpload = null;
     root.onchange=event=>{
       const picker=event.target;
-      if(picker.matches('[data-manage-shop]')){if(!managedShops.some(s=>s.id===picker.value))return;selectedManagementShop=picker.value;void run(()=>manage());return;}
+      if(picker.matches('[data-manage-shop]')){if(!managedShops.some(s=>s.id===picker.value))return;selectedManagementShop=picker.value;void run(()=>manage({openSingleProduct:fullOaProducts}));return;}
       if(picker.matches('[data-explore-sort]')){exploreSort=picker.value==='name'?'name':'recommended';paintExplore();return;}
       if(picker.closest('[data-form="product-search"]')&&['purchase_mode','redeem'].includes(picker.name)){void run(()=>discover(discoveryValues()));return;}
       if(picker.closest('[data-form="product"]')&&['purchase_mode','status'].includes(picker.name)){void checkOnlineWarnings();return;}
@@ -869,6 +929,7 @@
         window.liff?.isLoggedIn?.() && upload.token && window.liff.getAccessToken() === upload.token);
       productUpload = upload;
       const saveButton = form.querySelector('.shop-row button.primary');
+      const saveLabel = saveButton?.textContent;
       const controls = [...root.querySelectorAll('button,input,select,textarea')].filter(control => {
         if (!productPhoto || !form.contains(control)) return true;
         if (control === saveButton) return false;
@@ -897,7 +958,7 @@
           status.textContent='未更新圖片：'+error.message;
           throw error;
         } finally {
-          if (upload) saveButton.textContent = '儲存商品';
+          if (upload && saveButton) saveButton.textContent = saveLabel;
           productUpload = null;
           busy=false; picker.value=''; controls.forEach((control,i)=>control.disabled=disabled[i]);
           if (upload?.submitter && currentProductForm()) {
@@ -919,6 +980,11 @@
       const data=Object.fromEntries(new FormData(form));
       if(form.dataset.form==='product-search'){void run(()=>discover(discoveryValues()));return;}
       if(form.dataset.form==='search') { void run(()=>list('',data.q,listCategory)); return; }
+      const oaFull=form.dataset.oaUpload==='full';
+      const oaReview=oaFull&&event.submitter?.hasAttribute('data-oa-submit-review');
+      if(oaReview)data.status='active';
+      const oaActor=window.liff?.getAccessToken?.();
+      const oaShop=selectedManagementShop;
       busy=true; alert.textContent=data.status==='active'?'AI 上架審核中…通過後才會公開，請稍候。':'儲存草稿／封存中…'; const buttons=[...root.querySelectorAll('button,input,select,textarea')]; const disabled=buttons.map(b=>b.disabled); buttons.forEach(b=>b.disabled=true);
       const hasPendingImage=!!form.querySelector('[data-image-pending]:not([hidden])');
       if(hasPendingImage)pendingImage(form,alert.textContent+' 圖片尚未儲存成功。');
@@ -944,13 +1010,34 @@
             data.shipping_fee_cents=data.shipping_fee===''?null:Math.round(Number(data.shipping_fee)*100);delete data.shipping_fee;
             data.price_cents=Math.round(Number(data.price)*100); delete data.price;
             data.redeem_value=Number(data.redeem_value);
-            const result=form.dataset.oaUpload?await api('/product?oa_upload=1',data):await api('/product',data);
+            const path=form.dataset.oaUpload?'/product?oa_upload=1':'/product';
+            let result;
+            const currentOaForm=()=>root.contains(form)&&window.currentPage==='store-shop'&&oaActor===window.liff?.getAccessToken?.()&&oaShop===selectedManagementShop;
+            if(oaReview){
+              const saved=await api(path,{...data,status:'draft'});
+              if(!currentOaForm())return;
+              const draft=saved.products.find(p=>p.id===saved.oa_product_id&&p.status==='draft');
+              if(!draft)throw new Error('草稿版本無法確認，請重新開啟商品草稿');
+              setManagement(saved);
+              form.dataset.id=data.id=draft.id;
+              form.dataset.version=data.version=draft.version;
+            }
+            result=form.dataset.oaUpload?await api(path,data):await api('/product',data);
+            if(oaFull&&!currentOaForm())return;
             setManagement(result);
             if(form.dataset.oaUpload==='pilot'){
               const success=document.createElement('p');
               success.setAttribute('role','status');
               success.textContent='單件商品測試完成，草稿已儲存。';
               form.replaceWith(success);
+            }else if(oaFull){
+              renderFullOaProducts();
+              if(!oaReview){
+                const draft=items.find(p=>p.id===result.oa_product_id&&p.status==='draft');
+                if(draft)edit(draft,'full');
+              }
+              alert.textContent=oaReview?'審核通過，商品已上架。':'商品草稿已儲存，可繼續編輯或送出審核。';
+              return;
             }else renderManage();
           }
           alert.textContent=hasPendingImage?(data.status==='draft'?'圖片已儲存為草稿，尚未公開；本次沒有扣除點數。':'已儲存，圖片已更新；本次沒有扣除點數。'):'已儲存；本次沒有扣除點數。';
@@ -958,12 +1045,23 @@
         } catch(error){
           const original=items.find(p=>p.id===form.dataset.id);
           const reviewFailure=String(error.code||'').startsWith('LISTING_');
+          if(oaReview&&reviewFailure){
+            if(!root.contains(form)||window.currentPage!=='store-shop'||oaActor!==window.liff?.getAccessToken?.()||oaShop!==selectedManagementShop)return;
+            const issues=Array.isArray(error.review?.issues)?error.review.issues:
+              String(error.code).startsWith('LISTING_IMAGE_')?[{field:'image',reason:error.message}]:[];
+            if(issues.length)oaDraftIssues[form.dataset.id]=issues;
+            showOaDraftIssues(form,issues);
+            formMessage.textContent=issues.length?'草稿已儲存。請修改標出的項目，再送出審核。':'草稿已儲存。'+error.message;
+            alert.textContent=formMessage.textContent;
+            formMessage.scrollIntoView({block:'center'});
+            return;
+          }
           formMessage.textContent=error.name==='TimeoutError'?'連線逾時；請重新載入確認結果，勿連續重送。':error.message+(reviewFailure?`。尚未儲存；${original?'銷售方式仍為「'+(original.purchase_mode==='online'?'網購':'限店內')+'」。':''}表單選項尚未生效，請補齊可核對的用途資料再送審。`:'');
           if(reviewFailure)error.message=formMessage.textContent;
           if(hasPendingImage)pendingImage(form,(error.name==='TimeoutError'||error instanceof TypeError?'儲存結果尚未確認，請重新開啟店面確認結果，勿連續重送。':reviewFailure?'尚未儲存，公開頁保留原圖。':'本次儲存未完成，請以重新載入的店面為準。')+formMessage.textContent+' 新圖片與表單資料已保留。');
           (hasPendingImage?form.querySelector('[data-image-save]'):formMessage).scrollIntoView({block:'center'});throw error;
         }
-        finally { busy=false; if(submit)submit.textContent=submitText;buttons.forEach((b,i)=>b.disabled=disabled[i]); }
+        finally { busy=false; if(submit)submit.textContent=oaReview&&form.querySelector('[data-oa-review-summary]:not([hidden])')?'重新送審':submitText;buttons.forEach((b,i)=>b.disabled=disabled[i]); }
       });
     };
     const id=initialShopId;
