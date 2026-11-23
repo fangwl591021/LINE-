@@ -3321,7 +3321,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId });
         }
       } else {
-        window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId });
+        const homeActor = window.currentUserProfile.userId;
+        const enteredHome = window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId });
+        if (enteredHome && checkRes?.isRegistered === false && checkRes.success !== false &&
+            !resumedMotherRegistration?.pending && !shareCardId && !directStoreManage) {
+          window.showFirstHomeRegistrationGuide?.(homeActor, urlParams);
+        }
       }
 
       if (shareCardId) {

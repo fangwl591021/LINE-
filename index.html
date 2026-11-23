@@ -50,6 +50,7 @@
   <link rel="stylesheet" href="css/styles.css?v=7.6">
   <link rel="stylesheet" href="css/exchange-zone.css?v=4">
   <link rel="stylesheet" href="css/home-reference-theme.css?v=3">
+  <link rel="stylesheet" href="css/home-registration-guide.css?v=1">
   <link rel="stylesheet" href="css/points-wallet-qr.css?v=1">
   <link rel="stylesheet" href="css/daily-tank.css?v=2">
   <link rel="stylesheet" href="css/card-links.css?v=1">
@@ -3051,7 +3052,22 @@
   <script type="module" src="js/modules/daily-tank-challenge.js?v=6"></script>
   <script type="module" src="js/modules/game-center.mjs?v=2&richman=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=3&adminRoute=1&invitePrompt=0&dealerBottom=1&memberNumber=1&oaUpload=1"></script>
+  <dialog id="home-registration-guide" aria-labelledby="home-registration-title" aria-describedby="home-registration-description">
+    <div class="registration-guide-art">
+      <img src="assets/points-logo-transparent-20260916.png" alt="" width="76" height="76">
+    </div>
+    <div class="registration-guide-content">
+      <h2 id="home-registration-title">歡迎加入點數通</h2>
+      <p id="home-registration-description">完成會員註冊，就能建立專屬電子名片，開始使用會員功能。</p>
+      <form method="dialog">
+        <button type="submit" value="register" autofocus>開始註冊</button>
+        <button type="submit" value="browse">先逛逛</button>
+      </form>
+      <p class="registration-guide-later">稍後也可從「我的 → 會員註冊」進入。</p>
+    </div>
+  </dialog>
+  <script src="js/modules/home-registration-guide.js?v=1"></script>
+  <script src="js/auth.js?v=11.09&manage=1&chat=1&activity=1&cardlinks=1&birthday=2&island=6&credit=3&adminRoute=1&invitePrompt=0&dealerBottom=1&memberNumber=1&oaUpload=1&registerGuide=1"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.4&order=2"></script>
 </body>
