@@ -83,6 +83,16 @@ test('existing full-contact card renders without profile API; odd button remains
   await Promise.all((await h.webhook([event()])).jobs);
   const message = h.replies[0].messages[0];
   assert.equal(message.type, 'flex');
+  const [like, copy, share] = message.contents.header.contents;
+  assert.equal(like.action.type, 'uri');
+  assert.equal(copy.type, 'box');
+  assert.equal(copy.contents[0].text, '名片網址');
+  assert.equal(copy.action.type, 'clipboard');
+  assert.equal(copy.action.label, '名片網址');
+  const copyUrl = new URL(copy.action.clipboardText);
+  assert.equal(copyUrl.origin + copyUrl.pathname, 'https://fangwl591021.github.io/LINE-/');
+  assert.deepEqual([...copyUrl.searchParams], [['webCardId', 'CARD_one']]);
+  assert.equal(new URL(share.action.uri).searchParams.get('share'), '1');
   const actions = [];
   const visit = node => { if (!node || typeof node !== 'object') return;
     if (node.type === 'button') actions.push(node.action);

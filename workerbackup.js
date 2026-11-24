@@ -1562,6 +1562,15 @@ const LineOAChatModule = {
     if (flex?.header?.contents?.length) {
       const shareButton = flex.header.contents[flex.header.contents.length - 1];
       shareButton.action = { type: 'uri', uri: shareUrl };
+      flex.header.contents.splice(-1, 0, {
+        type: 'box', layout: 'vertical', justifyContent: 'center', backgroundColor: '#E6F4EF',
+        width: '80px', height: '25px', cornerRadius: '25px',
+        contents: [{ type: 'text', text: '名片網址', weight: 'bold', align: 'center', color: '#075B48', size: 'xs' }],
+        action: {
+          type: 'clipboard', label: '名片網址',
+          clipboardText: 'https://fangwl591021.github.io/LINE-/?webCardId=' + encodeURIComponent(card.rowId)
+        }
+      });
     }
     return {
       type: 'flex',
