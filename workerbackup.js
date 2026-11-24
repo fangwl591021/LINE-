@@ -1219,6 +1219,16 @@ const LineOAChatModule = {
     return params.toString();
   },
 
+  cardWebCopyQuickReplyItem(rowId) {
+    return {
+      type: 'action',
+      action: {
+        type: 'clipboard', label: '名片網址',
+        clipboardText: 'https://fangwl591021.github.io/LINE-/?webCardId=' + encodeURIComponent(rowId)
+      }
+    };
+  },
+
   myCardQuickReplyItems(userId, env, rowId = '') {
     return [{
       type: 'action',
@@ -1562,21 +1572,12 @@ const LineOAChatModule = {
     if (flex?.header?.contents?.length) {
       const shareButton = flex.header.contents[flex.header.contents.length - 1];
       shareButton.action = { type: 'uri', uri: shareUrl };
-      flex.header.contents.splice(-1, 0, {
-        type: 'box', layout: 'vertical', justifyContent: 'center', backgroundColor: '#E6F4EF',
-        width: '80px', height: '25px', cornerRadius: '25px',
-        contents: [{ type: 'text', text: '名片網址', weight: 'bold', align: 'center', color: '#075B48', size: 'xs' }],
-        action: {
-          type: 'clipboard', label: '名片網址',
-          clipboardText: 'https://fangwl591021.github.io/LINE-/?webCardId=' + encodeURIComponent(card.rowId)
-        }
-      });
     }
     return {
       type: 'flex',
       altText: `${card.name || '我的名片'} 的電子名片`,
       quickReply: {
-        items: this.myCardQuickReplyItems(userId, env, card.rowId)
+        items: [...this.myCardQuickReplyItems(userId, env, card.rowId), this.cardWebCopyQuickReplyItem(card.rowId)]
       },
       contents: flex
     };
@@ -3916,7 +3917,9 @@ const LineOAMyVideoKeywordModule = {
     if (!message) return null;
     const rowId = this.text(row && row.row_id);
     message.altText = `${this.text(row && row.name, '影音名片')} 的影音名片`;
-    message.quickReply = { items: this.videoQuickReplyItems(userId, env, rowId) };
+    message.quickReply = {
+      items: [...this.videoQuickReplyItems(userId, env, rowId), LineOAChatModule.cardWebCopyQuickReplyItem(rowId)]
+    };
     return message;
   },
 
