@@ -122,14 +122,27 @@
     if(!c)return window.showToast?.('辦活動選項尚未載入，請重新整理後再試',true);
     if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change'));}
   }
+  function hostingQuotaText(quota){
+    return quota.limit===null?`辦活動不限數量，目前 ${quota.activeCount} 場未結束`:
+      `未結束活動 ${quota.activeCount}／${quota.limit} 場`;
+  }
   async function showList(m,view='catalog'){
-    const data=await api('/overview',undefined,m);if(m.closed)return;m.frame('會員辦活動');m.onBack=null;
+    const [data,quota]=await Promise.all([api('/overview',undefined,m),view==='hosting'?api('/eligibility',undefined,m):null]);
+    if(m.closed)return;m.frame('會員辦活動');m.onBack=null;
     const nav=document.createElement('nav');nav.className='me-tabs';for(const [key,label]of [['catalog','活動列表'],['mine','我的報名'],['hosting','我辦的活動']]){const b=button(label,()=>m.work(()=>showList(m,key)));b.setAttribute('aria-pressed',String(view===key));nav.append(b);}m.body.append(nav);
-    if(view==='hosting')m.body.append(button('＋ 到行事曆辦活動',()=>openHostingCalendar(m)));
+    if(quota){
+      const note=document.createElement('p');note.className='me-muted';
+      note.textContent=hostingQuotaText(quota)+(quota.canHost?'':'，請等一場結束或取消後再辦活動。');
+      const create=button('＋ 到行事曆辦活動',()=>openHostingCalendar(m));create.disabled=!quota.canHost;
+      m.body.append(note,create);
+    }
     const records=view==='catalog'?data.sessions:view==='mine'?data.my:data.hosting;
     if(!records.length){const p=document.createElement('p');p.textContent='目前沒有紀錄';m.body.append(p);}
     for(const e of records){const article=document.createElement('article');article.className='me-card'+(closed(e)?' me-muted-card':'');article.innerHTML=`<h3>${esc(e.title)}</h3><p class="me-muted">分類：${esc(e.category||'活動')}</p><p>${esc(stamp(e.startsAt))}–${esc(stamp(e.endsAt))}</p><small>${esc(e.organizerName)} · ${closed(e)?e.status==='cancelled'?'已取消':'已結束':visibilityLabel(e)+' · 報名 '+e.registrationCount+(e.capacity?' / '+e.capacity:'')} · ${esc(e.feeText)}</small>${view==='mine'?`<p>${e.registrationStatus==='cancelled'?'已取消報名':e.checkedInAt?'已核銷':'已報名'} · 報名 ${esc(stamp(e.registeredAt))}</p>`:''}`;m.body.append(article);mountCover(article,e,m,true);const a=actions(article);a.append(button('查看活動',()=>m.work(()=>detail(m,e.id,view))));if(view==='hosting')a.append(button('報名名冊',()=>m.work(()=>roster(m,e.id,0,'hosting'))));}
-    const p=document.createElement('p');p.className='me-muted';p.textContent='每個分類最多顯示最近 200 場會員活動；官方活動及原梯次紀錄仍保留在原區塊。';m.body.append(p);
+    if(records.length){
+      const cards=document.createElement('div');cards.className='me-card-grid';
+      cards.append(...m.body.querySelectorAll(':scope > .me-card'));m.body.append(cards);
+    }
   }
   async function detail(m,id,returnView='catalog'){
     const data=await api('/'+id,undefined,m),e=data.event,r=data.registration;if(m.closed)return;m.frame(e.title);m.onBack=()=>m.work(()=>showList(m,returnView));
@@ -191,8 +204,8 @@
   }
   window.openMemberEvents=(view='catalog',id='')=>{const m=modal('會員辦活動');if(m)m.work(()=>id?detail(m,id):showList(m,view));};
   window.attachMemberHostedAgenda=()=>{
-    const form=document.getElementById('personal-agenda-form');if(!form||document.getElementById('agenda-host-activity'))return;const host=document.createElement('section');host.className='me-host-mode';host.innerHTML='<label><input id="agenda-host-activity" type="checkbox"> 辦活動</label><p>開放平台會員報名，由你查看名單及掃碼核銷。每人限一場未結束活動，不贈點、不扣點。先確認活動草稿，再發布。</p>';form.querySelector('.space-y-3')?.prepend(host);
-    let generation=0;const checkbox=host.querySelector('input');checkbox.onchange=async()=>{const current=++generation;const enabled=checkbox.checked;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=enabled;}if(!enabled)delete form.memberDmDraft;if(enabled)try{const r=await api('/eligibility');if(current!==generation||!checkbox.checked)return;if(!r.canHost)throw Error('你已有一場未結束活動，請先結束或取消原活動');}catch(e){if(current===generation){checkbox.checked=false;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=false;}checkbox.dispatchEvent(new Event('change'));window.showToast?.(e.message,true);}};};
+    const form=document.getElementById('personal-agenda-form');if(!form||document.getElementById('agenda-host-activity'))return;const host=document.createElement('section');host.className='me-host-mode';host.innerHTML='<label><input id="agenda-host-activity" type="checkbox"> 辦活動</label><p>開放報名，由你查看名單及掃碼核銷。不贈點、不扣點。先確認活動草稿，再發布。</p><p data-host-quota role="status" hidden></p>';form.querySelector('.space-y-3')?.prepend(host);
+    let generation=0;const checkbox=host.querySelector('input');checkbox.onchange=async()=>{const current=++generation;const enabled=checkbox.checked;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=enabled;}if(!enabled)delete form.memberDmDraft;if(enabled)try{const r=await api('/eligibility');if(current!==generation||!checkbox.checked)return;const note=host.querySelector('[data-host-quota]');note.textContent=hostingQuotaText(r);note.hidden=false;if(!r.canHost)throw Error('未結束活動已達額度，請等一場結束或取消後再辦活動。');}catch(e){if(current===generation){checkbox.checked=false;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=false;}checkbox.dispatchEvent(new Event('change'));window.showToast?.(e.message,true);}};};
     if(window.installMemberEventDm)window.installMemberEventDm(host,{api,confirm,checkbox,watch:form,isValid:()=>checkbox.checked&&!form.classList.contains('hidden'),discard:()=>{delete form.memberDmDraft;},get:()=>({title:document.getElementById('agenda-title')?.value,description:document.getElementById('agenda-notes')?.value,location:document.getElementById('agenda-location')?.value,startsAt:document.getElementById('agenda-start')?.value,endsAt:document.getElementById('agenda-end')?.value}),apply:(fields,actor,file)=>{for(const [name,id]of Object.entries({title:'agenda-title',description:'agenda-notes',location:'agenda-location',startsAt:'agenda-start',endsAt:'agenda-end'})){const el=document.getElementById(id);if(el)el.value=fields[name];}form.memberDmDraft={...actor,feeText:fields.feeText,dmFile:file};}});
     const panel=document.getElementById('personal-agenda-panel');if(panel){const entry=document.createElement('section');entry.className='me-agenda-entry';entry.innerHTML='<h3>會員辦活動</h3><p class="me-muted">行事曆勾選辦活動；與官方活動／梯次分開。</p>';const a=actions(entry);a.append(button('活動列表',()=>window.openMemberEvents()),button('我的報名',()=>window.openMemberEvents('mine')),button('我辦的活動',()=>window.openMemberEvents('hosting')));panel.append(entry);}
   };

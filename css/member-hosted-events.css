@@ -28,3 +28,10 @@
 .me-home-info{padding:12px;flex:1;min-width:0}.me-home-info small{display:block;color:#007b61;font-size:11px;font-weight:700;overflow-wrap:anywhere}.me-home-info h4{font-size:14px;font-weight:800;line-height:1.5;margin:6px 0;overflow-wrap:anywhere}.me-home-time,.me-home-fee{font-size:11px;color:#657784;margin:6px 0;overflow-wrap:anywhere}.me-home-location{font-size:12px;color:#657784;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .me-home-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:0 10px 12px}.me-home-actions button{min-width:0;min-height:42px;padding:8px 0;border:0;border-radius:12px;background:#eff5f8;color:#355364;font-size:12px;font-weight:700;white-space:nowrap}.me-home-actions button:nth-child(2){background:#eff6ff;color:#2563eb}.me-home-actions button.me-primary{background:#06c755;color:#fff}.me-home-actions button:disabled{background:#e9eef0;color:#657784}
 .me-home-status{grid-column:1/-1;text-align:center;padding:16px;color:#657784;font-size:13px}.me-home-status button{display:block;margin:10px auto 0;padding:10px 16px;border:1px solid #b9dacf;border-radius:12px;background:#fff;color:#006b56;font-weight:700}
+.me-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.me-card-grid .me-card{display:flex;flex-direction:column;min-width:0;padding:11px;border:1px solid #d6e8e0;border-radius:14px;overflow-wrap:anywhere}
+.me-card-grid .me-card h3{font-size:15px;line-height:1.35}
+.me-card-grid .me-card p{margin:5px 0;font-size:13px}
+.me-card-grid .me-actions{display:grid;margin:10px 0 0;gap:6px}
+.me-card-grid .me-actions button{padding:7px 3px;font-size:13px}
+.me-card-grid .me-thumbnail-image{height:auto;aspect-ratio:4/3}

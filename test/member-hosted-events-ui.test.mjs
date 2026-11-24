@@ -26,7 +26,7 @@ test('calendar branch precedes private save, one projection, review and existing
 });
 test('privacy, auth captured on every request, stale response and close/scan/ticket cleanup',()=>{
   assert.match(ui,/current\.uid!==identity\.uid\|\|current\.token!==identity\.token/);assert.match(ui,/credentials:'omit',cache:'no-store'/);assert.match(ui,/scope\?\.closed/);assert.match(ui,/controllers\.forEach\(c=>c\.abort\(\)\)/);
-  assert.match(ui,/每人限一場未結束活動/);assert.match(ui,/不贈點、不扣點/);assert.match(ui,/getTracks\(\)\.forEach\(t=>t\.stop\(\)\)/);assert.match(ui,/visibilitychange/);assert.match(ui,/清|close/);assert.match(ui,/clearTimeout\(timer\)/);assert.match(ui,/同一筆活動不會重複建立/);
+  assert.match(ui,/quota\.activeCount/);assert.match(ui,/辦活動不限數量/);assert.match(ui,/不贈點、不扣點/);assert.match(ui,/getTracks\(\)\.forEach\(t=>t\.stop\(\)\)/);assert.match(ui,/visibilitychange/);assert.match(ui,/清|close/);assert.match(ui,/clearTimeout\(timer\)/);assert.match(ui,/同一筆活動不會重複建立/);
 });
 
 const block=(start,end)=>{const a=ui.indexOf(start),b=ui.indexOf(end,a+start.length);assert.ok(a>=0&&b>a);return ui.slice(a,b);};

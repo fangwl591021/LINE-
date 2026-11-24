@@ -67,12 +67,31 @@ test('registered canonical LINE identity only, no card gating, points or officia
   f.sql.exec(`INSERT INTO user_identity_links VALUES('${UIDS.host}','${UIDS.guest}','active')`);assert.equal((await f.api('/overview')).httpStatus,503); // auth is currently unavailable
   f.setAuth(200);assert.equal((await f.api('/overview')).httpStatus,409);
 });
-test('single unfinished event, idempotent create, parallel insert authority and no reopen',async t=>{
+test('ordinary member has one unfinished slot, create retries are idempotent and cancelled events cannot reopen',async t=>{
   const f=fixture(t),data=f.input(),e=await f.create(data);assert.equal((await f.create(data)).id,e.id);
   assert.equal((await f.api('/events',{data:f.input()})).code,'hosted_event_active');assert.equal((await f.api('/eligibility')).canHost,false);
   await f.api('/'+e.id+'/cancel-event',{data:{requestKey:crypto.randomUUID(),revision:0}});assert.equal((await f.api('/eligibility')).canHost,true);await f.create();
   assert.throws(()=>f.sql.prepare("UPDATE member_hosted_events SET status='active' WHERE id=?").run(e.id),/hosted_event_closed/);
-  const a=f.input(),b=f.input(),r=await Promise.all([f.api('/events',{member:'other',data:a}),f.api('/events',{member:'other',data:b})]);assert.equal(r.filter(x=>x.success).length,1);assert.equal(r.filter(x=>x.code==='hosted_event_active').length,1);
+});
+test('full merchants have two unfinished slots, admin is unlimited and releases are atomic',async t=>{
+  const f=fixture(t);
+  f.sql.prepare("UPDATE users SET role='店長' WHERE row_id='host'").run();
+  const requests=Array.from({length:3},()=>f.input());
+  const results=await Promise.all(requests.map((data,i)=>f.api('/events',{member:i===2?'old':'host',data})));
+  assert.equal(results.filter(x=>x.success).length,2);
+  assert.equal(results.filter(x=>x.code==='hosted_event_active').length,1);
+  const full=await f.api('/eligibility',{member:'old'});
+  assert.deepEqual([full.limit,full.activeCount,full.canHost],[2,2,false]);
+  const existing=results.findIndex(x=>x.success),saved=results[existing].event;
+  assert.equal((await f.create(requests[existing])).id,saved.id);
+  assert.equal((await f.api('/'+saved.id+'/update',{data:{...requests[existing],requestKey:crypto.randomUUID(),title:'調整現有活動',revision:0}})).success,true);
+  assert.equal((await f.api('/'+saved.id+'/cancel-event',{data:{requestKey:crypto.randomUUID(),revision:1}})).success,true);
+  assert.equal((await f.api('/eligibility')).activeCount,1);
+  await f.create();
+  const unlimited=await Promise.all(Array.from({length:4},()=>f.api('/events',{member:'other',data:f.input()})));
+  assert.equal(unlimited.filter(x=>x.success).length,4);
+  const admin=await f.api('/eligibility',{member:'other'});
+  assert.deepEqual([admin.limit,admin.activeCount,admin.canHost],[null,4,true]);
 });
 test('strict fields, capacity, invalid dates, future deadline and safe cover validation',async t=>{
   const f=fixture(t);for(const bad of [{title:''},{description:''},{location:''},{capacity:-1},{capacity:1.5},{capacity:10001},{capacity:'2'},{startsAt:'2026-02-31T06:00:00.000Z'},{endsAt:'2020-01-01T00:00:00.000Z'},{registrationClosesAt:'2100-01-01T00:00:00.000Z'},{coverUrl:'javascript:alert(1)'},{coverUrl:'https://user:secret@example.com/a'}])assert.equal((await f.api('/events',{data:{...f.input(),...bad}})).httpStatus,400,JSON.stringify(bad));

@@ -9,7 +9,7 @@ const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers
 const stmt=(db,query,...args)=>db.prepare(query).bind(...args);
 const fail=(code,error,status=400)=>{throw Object.assign(new Error(error),{code,status});};
 const at=()=>new Date().toISOString();
-const safeErrors={hosted_event_active:'你已有一場未結束活動，請先結束或取消原活動。',hosted_event_closed:'活動已結束或取消，不能重新開放。',hosted_owner_invalid:'你不能管理這場活動。',hosted_event_full:'活動已額滿。',hosted_registration_closed:'活動已截止報名、結束或取消。',hosted_capacity_too_small:'人數上限不能低於目前有效報名人數。'};
+const safeErrors={hosted_event_active:'未結束活動已達額度，請等一場結束或取消後再辦活動。',hosted_event_closed:'活動已結束或取消，不能重新開放。',hosted_owner_invalid:'你不能管理這場活動。',hosted_event_full:'活動已額滿。',hosted_registration_closed:'活動已截止報名、結束或取消。',hosted_capacity_too_small:'人數上限不能低於目前有效報名人數。'};
 function fields(body,allowed){if(Object.keys(body).some(key=>!allowed.includes(key)))fail('INVALID_FIELDS','資料欄位不正確');}
 function text(value,label,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('INVALID_INPUT',`${label}不正確`);return value.trim();}
 function key(value){if(!UUID.test(value||''))fail('INVALID_KEY','請重新送出');return value;}
@@ -38,6 +38,12 @@ async function actorFor(request,db,fetcher){
 }
 async function rows(db,query,...args){const r=await stmt(db,query,...args).all();if(r.success===false||!Array.isArray(r.results))throw Error('MEMBER_EVENTS_READ_FAILED');return r.results;}
 async function run(db,query,...args){const r=await stmt(db,query,...args).run();if(r.success===false)throw Error('MEMBER_EVENTS_WRITE_FAILED');return r;}
+async function hostingQuota(db,actor) {
+  const row=await stmt(db,'SELECT max_active,active_count FROM member_event_hosting_quota WHERE owner_id=?',actor.memberId).first();
+  if(!row)fail('MEMBER_REQUIRED','請先完成會員註冊',403);
+  const limit=row.max_active,activeCount=row.active_count;
+  return {canHost:limit===null||activeCount<limit,limit,activeCount};
+}
 const SELECT=`SELECT e.*,COALESCE(NULLIF(u.name,''),'活動主辦人') AS organizerName,
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='registered') AS registrationCount,
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='registered' AND r.checked_in_at IS NOT NULL) AS checkedInCount,
@@ -81,6 +87,7 @@ async function save(db,actor,body,id='',bucket){
   const eventId=id||crypto.randomUUID(),now=at(),args=Object.values(value);
   let media;
   try{
+  if(!id&&!(await hostingQuota(db,actor)).canHost)fail('hosted_event_active',safeErrors.hosted_event_active,409);
   if('dmFile' in body){media=await storeMedia(bucket,eventId,body.dmFile);value.cover_url=media.url;args[8]=media.url;}
   const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,category=?,visibility=?,network_id=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
     await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,category,visibility,network_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
@@ -88,6 +95,10 @@ async function save(db,actor,body,id='',bucket){
   }catch(error){
     // Do not remove a committed reference if a later response/read failed.
     if(media)try{const saved=await stmt(db,'SELECT cover_url FROM member_hosted_events WHERE id=?',eventId).first();if(saved?.cover_url!==media.url)await bucket.delete(media.objectKey);}catch{}
+    if(!id&&(error.code==='hosted_event_active'||/hosted_event_active|UNIQUE constraint failed/.test(String(error.message)))){
+      const saved=await stmt(db,'SELECT id FROM member_hosted_events WHERE owner_id=? AND create_key=?',actor.memberId,requestKey).first();
+      if(saved)return mapped(await eventFor(db,saved.id,actor),actor.memberId);
+    }
     throw error;
   }
 }
@@ -140,8 +151,9 @@ export async function handleMemberEvents(request,env,fetcher=fetch){
     if(request.method==='POST'&&path==='/dm-draft')return reply(await extractMemberEventDm(await boundedJson(request,MEMBER_DM_BODY_LIMIT),env,db,actor,fetcher,request.signal));
     if(request.method==='GET'&&path==='/overview')return reply({success:true,...await overview(db,actor)});
     if(request.method==='GET'&&path==='/eligibility'){
-      const active=await stmt(db,"SELECT id FROM member_hosted_events WHERE owner_id=? AND status='active' AND julianday(ends_at)>julianday('now') LIMIT 1",actor.memberId).first();
-      return reply({success:true,canHost:!active,activeEventId:active?.id||''});
+      const quota=await hostingQuota(db,actor);
+      const active=await stmt(db,"SELECT id FROM member_hosted_events WHERE owner_id=? AND status='active' AND julianday(ends_at)>julianday('now') ORDER BY ends_at,id LIMIT 1",actor.memberId).first();
+      return reply({success:true,...quota,activeEventId:active?.id||''});
     }
     if(request.method==='POST'&&path==='/events')return reply({success:true,event:await save(db,actor,await boundedJson(request,MEMBER_MEDIA_LIMIT),'',env.IMG_BUCKET)});
     const media=path.match(/^\/([0-9a-f-]{36})\/media\/([0-9a-f-]{36})\.(jpg|png|webp|pdf)$/i);
