@@ -67,11 +67,29 @@ test('registered canonical LINE identity only, no card gating, points or officia
   f.sql.exec(`INSERT INTO user_identity_links VALUES('${UIDS.host}','${UIDS.guest}','active')`);assert.equal((await f.api('/overview')).httpStatus,503); // auth is currently unavailable
   f.setAuth(200);assert.equal((await f.api('/overview')).httpStatus,409);
 });
-test('ordinary member has one unfinished slot, create retries are idempotent and cancelled events cannot reopen',async t=>{
+test('merchant create retries are idempotent and cancelled events cannot reopen',async t=>{
   const f=fixture(t),data=f.input(),e=await f.create(data);assert.equal((await f.create(data)).id,e.id);
+  await f.create();
   assert.equal((await f.api('/events',{data:f.input()})).code,'hosted_event_active');assert.equal((await f.api('/eligibility')).canHost,false);
   await f.api('/'+e.id+'/cancel-event',{data:{requestKey:crypto.randomUUID(),revision:0}});assert.equal((await f.api('/eligibility')).canHost,true);await f.create();
   assert.throws(()=>f.sql.prepare("UPDATE member_hosted_events SET status='active' WHERE id=?").run(e.id),/hosted_event_closed/);
+});
+test('ordinary members are blocked from hosting but can view and register',async t=>{
+  const f=fixture(t), e=await f.create();
+  const quota=await f.api('/eligibility',{member:'guest'});
+  assert.deepEqual([quota.limit,quota.activeCount,quota.canHost],[0,0,false]);
+  for(const [path,data] of [['/events',f.input()],['/dm-draft',{}]]){
+    const denied=await f.api(path,{member:'guest',data});
+    assert.deepEqual([denied.httpStatus,denied.code],[403,'HOSTING_NOT_ALLOWED']);
+  }
+  assert.throws(()=>f.sql.prepare(`INSERT INTO member_hosted_events
+    (id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,created_at,updated_at)
+    SELECT ?,'guest',?,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,created_at,updated_at
+    FROM member_hosted_events WHERE id=?`).run(crypto.randomUUID(),crypto.randomUUID(),e.id),/hosted_event_active/);
+  assert.equal((await f.api('/overview',{member:'guest'})).hostingAllowed,false);
+  assert.equal((await f.api('/overview')).hostingAllowed,true);
+  assert.equal((await f.api('/'+e.id,{member:'guest'})).event.id,e.id);
+  assert.equal((await f.api('/'+e.id+'/register',{member:'guest',data:{}})).success,true);
 });
 test('full merchants have two unfinished slots, admin is unlimited and releases are atomic',async t=>{
   const f=fixture(t);

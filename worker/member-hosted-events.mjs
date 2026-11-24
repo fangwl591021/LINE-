@@ -9,6 +9,7 @@ const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers
 const stmt=(db,query,...args)=>db.prepare(query).bind(...args);
 const fail=(code,error,status=400)=>{throw Object.assign(new Error(error),{code,status});};
 const at=()=>new Date().toISOString();
+const HOSTING_REQUIRED='僅總管與雙向店家可辦活動。';
 const safeErrors={hosted_event_active:'未結束活動已達額度，請等一場結束或取消後再辦活動。',hosted_event_closed:'活動已結束或取消，不能重新開放。',hosted_owner_invalid:'你不能管理這場活動。',hosted_event_full:'活動已額滿。',hosted_registration_closed:'活動已截止報名、結束或取消。',hosted_capacity_too_small:'人數上限不能低於目前有效報名人數。'};
 function fields(body,allowed){if(Object.keys(body).some(key=>!allowed.includes(key)))fail('INVALID_FIELDS','資料欄位不正確');}
 function text(value,label,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('INVALID_INPUT',`${label}不正確`);return value.trim();}
@@ -58,13 +59,14 @@ async function eventFor(db,id,actor,owned=false,history=true){
   return e;
 }
 async function overview(db,actor){
-  const [all,my,hosting]=await Promise.all([
+  const [all,my,hosting,quota]=await Promise.all([
     rows(db,SELECT+" WHERE e.status='active' AND julianday(e.ends_at)>julianday('now') AND (e.visibility='platform' OR (e.visibility='network' AND e.network_id=?) OR e.owner_id=?) ORDER BY e.starts_at,e.id LIMIT 200",actor.networkId,actor.memberId),
     rows(db,SELECT+' WHERE EXISTS(SELECT 1 FROM member_event_registrations r WHERE r.event_id=e.id AND r.member_id=?) ORDER BY e.starts_at DESC,e.id LIMIT 200',actor.memberId),
-    rows(db,SELECT+' WHERE e.owner_id=? ORDER BY e.starts_at DESC,e.id LIMIT 200',actor.memberId)
+    rows(db,SELECT+' WHERE e.owner_id=? ORDER BY e.starts_at DESC,e.id LIMIT 200',actor.memberId),
+    hostingQuota(db,actor)
   ]);
   const mine=await rows(db,'SELECT event_id,status,registered_at,checked_in_at FROM member_event_registrations WHERE member_id=? ORDER BY registered_at DESC,id DESC LIMIT 200',actor.memberId),byId=new Map(my.map(e=>[e.id,e]));
-  return {sessions:all.map(e=>mapped(e,actor.memberId)),hosting:hosting.map(e=>mapped(e,actor.memberId)),my:mine.filter(r=>byId.has(r.event_id)).map(r=>({...mapped(byId.get(r.event_id),actor.memberId),registrationStatus:r.status,registeredAt:r.registered_at,checkedInAt:r.checked_in_at||''}))};
+  return {hostingAllowed:quota.limit!==0,sessions:all.map(e=>mapped(e,actor.memberId)),hosting:hosting.map(e=>mapped(e,actor.memberId)),my:mine.filter(r=>byId.has(r.event_id)).map(r=>({...mapped(byId.get(r.event_id),actor.memberId),registrationStatus:r.status,registeredAt:r.registered_at,checkedInAt:r.checked_in_at||''}))};
 }
 const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl','category','visibility'];
 async function save(db,actor,body,id='',bucket){
@@ -87,7 +89,11 @@ async function save(db,actor,body,id='',bucket){
   const eventId=id||crypto.randomUUID(),now=at(),args=Object.values(value);
   let media;
   try{
-  if(!id&&!(await hostingQuota(db,actor)).canHost)fail('hosted_event_active',safeErrors.hosted_event_active,409);
+  if(!id){
+    const quota=await hostingQuota(db,actor);
+    if(quota.limit===0)fail('HOSTING_NOT_ALLOWED',HOSTING_REQUIRED,403);
+    if(!quota.canHost)fail('hosted_event_active',safeErrors.hosted_event_active,409);
+  }
   if('dmFile' in body){media=await storeMedia(bucket,eventId,body.dmFile);value.cover_url=media.url;args[8]=media.url;}
   const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,category=?,visibility=?,network_id=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
     await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,category,visibility,network_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
@@ -98,6 +104,7 @@ async function save(db,actor,body,id='',bucket){
     if(!id&&(error.code==='hosted_event_active'||/hosted_event_active|UNIQUE constraint failed/.test(String(error.message)))){
       const saved=await stmt(db,'SELECT id FROM member_hosted_events WHERE owner_id=? AND create_key=?',actor.memberId,requestKey).first();
       if(saved)return mapped(await eventFor(db,saved.id,actor),actor.memberId);
+      if((await hostingQuota(db,actor)).limit===0)fail('HOSTING_NOT_ALLOWED',HOSTING_REQUIRED,403);
     }
     throw error;
   }
@@ -148,7 +155,10 @@ export async function handleMemberEvents(request,env,fetcher=fetch){
     if(String(env.MEMBER_EVENTS_DISABLED)==='1')fail('FEATURE_DISABLED','會員辦活動暫未開放',503);
     if(!['GET','POST'].includes(request.method))fail('METHOD_NOT_ALLOWED','不支援的操作',405);
     const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB,actor=await actorFor(request,db,fetcher),path=url.pathname.slice(BASE.length);
-    if(request.method==='POST'&&path==='/dm-draft')return reply(await extractMemberEventDm(await boundedJson(request,MEMBER_DM_BODY_LIMIT),env,db,actor,fetcher,request.signal));
+    if(request.method==='POST'&&path==='/dm-draft'){
+      if((await hostingQuota(db,actor)).limit===0)fail('HOSTING_NOT_ALLOWED',HOSTING_REQUIRED,403);
+      return reply(await extractMemberEventDm(await boundedJson(request,MEMBER_DM_BODY_LIMIT),env,db,actor,fetcher,request.signal));
+    }
     if(request.method==='GET'&&path==='/overview')return reply({success:true,...await overview(db,actor)});
     if(request.method==='GET'&&path==='/eligibility'){
       const quota=await hostingQuota(db,actor);

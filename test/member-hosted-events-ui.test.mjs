@@ -32,7 +32,7 @@ test('privacy, auth captured on every request, stale response and close/scan/tic
 const block=(start,end)=>{const a=ui.indexOf(start),b=ui.indexOf(end,a+start.length);assert.ok(a>=0&&b>a);return ui.slice(a,b);};
 test('hosting calendar navigates once and opens the real draft immediately, without awaiting history',()=>{
   for(const alreadyChecked of [false,true]){
-    const calls=[],checkbox={checked:alreadyChecked,dispatchEvent:e=>calls.push(['change',e.type])};
+    const calls=[],checkbox={checked:alreadyChecked,closest:()=>({hidden:true}),dispatchEvent:e=>calls.push(['change',e.type])};
     const window={goPage:(...args)=>calls.push(['page',...args]),loadMyActivities:()=>{calls.push(['load']);return new Promise(()=>{});},toggleAgendaForm:force=>calls.push(['draft',force])};
     const c={window,document:{getElementById:id=>{assert.equal(id,'agenda-host-activity');return checkbox;}},Event:class{constructor(type){this.type=type;}}};
     vm.createContext(c);vm.runInContext(block('  function openHostingCalendar(', '  async function showList('),c);
@@ -50,9 +50,10 @@ test('missing calendar module keeps the modal open and explains retry instead of
 test('calendar projection retains past host and registered events once, but excludes cancellations and public strangers',async()=>{
   const e=(id,past=false)=>({id,title:id,status:'active',startsAt:past?'2020-10-08T06:00:00Z':'2099-10-08T06:00:00Z',endsAt:past?'2020-10-08T08:00:00Z':'2099-10-08T08:00:00Z',organizerName:'主辦'});
   const host=e('host'),past=e('past-host',true),guest=e('past-registered',true),cancelled={...e('cancelled'),status:'cancelled'};
-  const calls=[],c={window:{},api:async path=>{calls.push(path);return {hosting:[host,past,cancelled],my:[{...host,registrationStatus:'registered'},{...guest,registrationStatus:'registered'},{...e('cancelled-registration'),registrationStatus:'cancelled'}],sessions:[e('stranger')]};},closed:e=>e.status!=='active'||Date.parse(e.endsAt)<=Date.now()};
+  const calls=[],form={hidden:false},c={window:{},document:{getElementById:()=>({checked:false,closest:()=>form})},api:async path=>{calls.push(path);return {hostingAllowed:false,hosting:[host,past,cancelled],my:[{...host,registrationStatus:'registered'},{...guest,registrationStatus:'registered'},{...e('cancelled-registration'),registrationStatus:'cancelled'}],sessions:[e('stranger')]};},closed:e=>e.status!=='active'||Date.parse(e.endsAt)<=Date.now()};
   vm.createContext(c);vm.runInContext(block('  window.loadMemberHostedAgenda=', '  const query='),c);
   const rows=await c.window.loadMemberHostedAgenda();
+  assert.equal(form.hidden,true);
   assert.deepEqual(Array.from(rows,r=>r.taskId),['host','past-host','past-registered']);
   assert.deepEqual(Array.from(rows,r=>r.status),['pending','done','done']);
   assert.ok(rows.every(r=>r.memberHosted&&r.taskType==='hosted'&&r.recurrenceType==='none'));assert.deepEqual(calls,['/overview']);

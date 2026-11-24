@@ -7,6 +7,7 @@
   const utc=v=>{if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))throw Error('請填寫活動日期時間');const d=new Date(v+':00+08:00');if(!Number.isFinite(d.getTime())||local(d)!==v)throw Error('日期不正確');return d.toISOString();};
   const closed=e=>e.status!=='active'||Date.parse(e.endsAt)<=Date.now();
   const visibilityLabel=e=>e.visibility==='network'?'僅歸屬會員可見':'公開給所有登入平台會員';
+  const hostingRequired='僅總管與雙向店家可辦活動。';
   let active;
   function login(){const uid=window.currentUserProfile?.userId,token=window.liff?.isLoggedIn?.()?window.liff.getAccessToken?.():'';if(!uid||!token)throw Error('請先從 LINE 登入並完成會員註冊');return {uid,token};}
   async function api(path,body,scope,timeoutMs=18000){
@@ -120,9 +121,11 @@
     m.close();window.goPage('my-activities',true);void window.loadMyActivities();window.toggleAgendaForm(true);
     const c=document.getElementById('agenda-host-activity');
     if(!c)return window.showToast?.('辦活動選項尚未載入，請重新整理後再試',true);
+    c.closest('.me-host-mode').hidden=false;
     if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change'));}
   }
   function hostingQuotaText(quota){
+    if(quota.limit===0)return hostingRequired;
     return quota.limit===null?`辦活動不限數量，目前 ${quota.activeCount} 場未結束`:
       `未結束活動 ${quota.activeCount}／${quota.limit} 場`;
   }
@@ -132,9 +135,13 @@
     const nav=document.createElement('nav');nav.className='me-tabs';for(const [key,label]of [['catalog','活動列表'],['mine','我的報名'],['hosting','我辦的活動']]){const b=button(label,()=>m.work(()=>showList(m,key)));b.setAttribute('aria-pressed',String(view===key));nav.append(b);}m.body.append(nav);
     if(quota){
       const note=document.createElement('p');note.className='me-muted';
-      note.textContent=hostingQuotaText(quota)+(quota.canHost?'':'，請等一場結束或取消後再辦活動。');
-      const create=button('＋ 到行事曆辦活動',()=>openHostingCalendar(m));create.disabled=!quota.canHost;
-      m.body.append(note,create);
+      note.textContent=hostingQuotaText(quota);
+      m.body.append(note);
+      if(quota.limit!==0){
+        if(!quota.canHost)note.textContent+='，請等一場結束或取消後再辦活動。';
+        const create=button('＋ 到行事曆辦活動',()=>openHostingCalendar(m));create.disabled=!quota.canHost;
+        m.body.append(create);
+      }
     }
     const records=view==='catalog'?data.sessions:view==='mine'?data.my:data.hosting;
     if(!records.length){const p=document.createElement('p');p.textContent='目前沒有紀錄';m.body.append(p);}
@@ -204,14 +211,26 @@
   }
   window.openMemberEvents=(view='catalog',id='')=>{const m=modal('會員辦活動');if(m)m.work(()=>id?detail(m,id):showList(m,view));};
   window.attachMemberHostedAgenda=()=>{
-    const form=document.getElementById('personal-agenda-form');if(!form||document.getElementById('agenda-host-activity'))return;const host=document.createElement('section');host.className='me-host-mode';host.innerHTML='<label><input id="agenda-host-activity" type="checkbox"> 辦活動</label><p>開放報名，由你查看名單及掃碼核銷。不贈點、不扣點。先確認活動草稿，再發布。</p><p data-host-quota role="status" hidden></p>';form.querySelector('.space-y-3')?.prepend(host);
-    let generation=0;const checkbox=host.querySelector('input');checkbox.onchange=async()=>{const current=++generation;const enabled=checkbox.checked;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=enabled;}if(!enabled)delete form.memberDmDraft;if(enabled)try{const r=await api('/eligibility');if(current!==generation||!checkbox.checked)return;const note=host.querySelector('[data-host-quota]');note.textContent=hostingQuotaText(r);note.hidden=false;if(!r.canHost)throw Error('未結束活動已達額度，請等一場結束或取消後再辦活動。');}catch(e){if(current===generation){checkbox.checked=false;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=false;}checkbox.dispatchEvent(new Event('change'));window.showToast?.(e.message,true);}};};
+    const form=document.getElementById('personal-agenda-form');if(!form||document.getElementById('agenda-host-activity'))return;const host=document.createElement('section');host.className='me-host-mode';host.hidden=true;host.innerHTML='<label><input id="agenda-host-activity" type="checkbox"> 辦活動</label><p>開放報名，由你查看名單及掃碼核銷。不贈點、不扣點。先確認活動草稿，再發布。</p><p data-host-quota role="status" hidden></p>';form.querySelector('.space-y-3')?.prepend(host);
+    let generation=0;const checkbox=host.querySelector('input');checkbox.onchange=async()=>{const current=++generation;const enabled=checkbox.checked;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=enabled;}if(!enabled)delete form.memberDmDraft;if(enabled)try{const r=await api('/eligibility');if(current!==generation||!checkbox.checked)return;const note=host.querySelector('[data-host-quota]');note.textContent=hostingQuotaText(r);note.hidden=false;if(r.limit===0){host.hidden=true;throw Error(hostingRequired);}if(!r.canHost)throw Error('未結束活動已達額度，請等一場結束或取消後再辦活動。');}catch(e){if(current===generation){checkbox.checked=false;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=false;}checkbox.dispatchEvent(new Event('change'));window.showToast?.(e.message,true);}};};
     if(window.installMemberEventDm)window.installMemberEventDm(host,{api,confirm,checkbox,watch:form,isValid:()=>checkbox.checked&&!form.classList.contains('hidden'),discard:()=>{delete form.memberDmDraft;},get:()=>({title:document.getElementById('agenda-title')?.value,description:document.getElementById('agenda-notes')?.value,location:document.getElementById('agenda-location')?.value,startsAt:document.getElementById('agenda-start')?.value,endsAt:document.getElementById('agenda-end')?.value}),apply:(fields,actor,file)=>{for(const [name,id]of Object.entries({title:'agenda-title',description:'agenda-notes',location:'agenda-location',startsAt:'agenda-start',endsAt:'agenda-end'})){const el=document.getElementById(id);if(el)el.value=fields[name];}form.memberDmDraft={...actor,feeText:fields.feeText,dmFile:file};}});
     const panel=document.getElementById('personal-agenda-panel');if(panel){const entry=document.createElement('section');entry.className='me-agenda-entry';entry.innerHTML='<h3>會員辦活動</h3><p class="me-muted">行事曆勾選辦活動；與官方活動／梯次分開。</p>';const a=actions(entry);a.append(button('活動列表',()=>window.openMemberEvents()),button('我的報名',()=>window.openMemberEvents('mine')),button('我辦的活動',()=>window.openMemberEvents('hosting')));panel.append(entry);}
   };
   window.reviewMemberHostedAgenda=()=>{const value=id=>document.getElementById(id)?.value||'';const m=modal('確認活動草稿');if(!m)return;try{const starts=value('agenda-start'),ends=value('agenda-end'),dm=document.getElementById('personal-agenda-form')?.memberDmDraft,actor=login();if(dm&&(dm.uid!==actor.uid||dm.token!==actor.token))throw Error('登入身分已變更，請重新辨識或填寫');review(m,{title:value('agenda-title'),description:value('agenda-notes'),location:value('agenda-location'),startsAt:starts?utc(starts):'',endsAt:ends?utc(ends):'',registrationClosesAt:starts?utc(starts):'',capacity:0,feeText:dm?.feeText,dmFile:dm?.dmFile},async e=>{m.close(true);window.toggleAgendaForm?.(false);for(const id of ['agenda-title','agenda-start','agenda-end','agenda-related','agenda-location','agenda-notes']){const el=document.getElementById(id);if(el)el.value='';}const c=document.getElementById('agenda-host-activity');if(c){c.checked=false;c.dispatchEvent(new Event('change'));}window.personalAgendaVoiceDraft=null;await window.loadPersonalAgenda?.();window.openMemberEvents('hosting',e.id);});}catch(e){m.note(e.message);}};
   // Called only while opening the existing calendar. No startup API or storage.
-  window.loadMemberHostedAgenda=async()=>{const data=await api('/overview'),unique=new Map();for(const e of [...data.hosting,...data.my.filter(r=>r.registrationStatus==='registered')])if(e.status==='active')unique.set(e.id,e);return [...unique.values()].map(e=>({taskId:e.id,title:e.title,startTime:e.startsAt,endTime:e.endsAt,notes:e.description,relatedName:'主辦：'+e.organizerName,taskType:'hosted',status:closed(e)?'done':'pending',recurrenceType:'none',memberHosted:true}));};
+  window.loadMemberHostedAgenda=async()=>{
+    const checkbox=document.getElementById('agenda-host-activity'),host=checkbox?.closest('.me-host-mode');
+    if(host&&!checkbox.checked)host.hidden=true;
+    const data=await api('/overview'),unique=new Map();
+    if(host){
+      host.hidden=data.hostingAllowed!==true;
+      if(host.hidden&&checkbox.checked){
+        checkbox.checked=false;
+        checkbox.dispatchEvent(new Event('change'));
+      }
+    }
+    for(const e of [...data.hosting,...data.my.filter(r=>r.registrationStatus==='registered')])if(e.status==='active')unique.set(e.id,e);return [...unique.values()].map(e=>({taskId:e.id,title:e.title,startTime:e.startsAt,endTime:e.endsAt,notes:e.description,relatedName:'主辦：'+e.organizerName,taskType:'hosted',status:closed(e)?'done':'pending',recurrenceType:'none',memberHosted:true}));
+  };
   const query=new URLSearchParams(location.search),nested=new URLSearchParams((query.get('liff.state')||'').replace(/^\?/,'')),allowed=new Set(['memberEvent','liff.state','liffClientId','liffRedirectUri','code','state','error','error_description','liff.referrer']);
   const pure=[...query.keys(),...nested.keys()].every(k=>allowed.has(k))&&query.getAll('memberEvent').length+ nested.getAll('memberEvent').length===1,id=query.get('memberEvent')||nested.get('memberEvent');
   if(pure&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id||'')){let attempts=0;const timer=setInterval(()=>{attempts++;if(window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()){clearInterval(timer);window.openMemberEvents('catalog',id);}else if(attempts>=120)clearInterval(timer);},500);window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});}

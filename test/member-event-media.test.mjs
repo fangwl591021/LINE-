@@ -32,7 +32,7 @@ test('bad type/header/base64/oversize and text limits never upload or publish',a
 test('R2/SQL failures do not publish missing media or leave a readable draft',async t=>{
   const f=setup(t);f.env.IMG_BUCKET.put=async()=>{throw Error('synthetic upload failure');};assert.equal((await f.api('/events',{data:{...f.input(),dmFile:png}})).httpStatus,503);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM member_hosted_events').get().n,0);
   const g=setup(t);g.setBadWrite(true);assert.equal((await g.api('/events',{data:{...g.input(),dmFile:png}})).httpStatus,503);assert.equal(g.objects.size,0);assert.equal(g.puts.length,1);
-  const h=setup(t);await h.create();assert.equal((await h.api('/events',{data:{...h.input(),dmFile:png}})).code,'hosted_event_active');assert.equal(h.objects.size,0);
+  const h=setup(t);await h.create();await h.create();assert.equal((await h.api('/events',{data:{...h.input(),dmFile:png}})).code,'hosted_event_active');assert.equal(h.objects.size,0);
 });
 test('simultaneous create is one activity; losing media removed, winner remains readable',async t=>{
   const f=setup(t),input={...f.input(),dmFile:png};const results=await Promise.all([f.api('/events',{data:input}),f.api('/events',{data:input})]);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM member_hosted_events').get().n,1);assert.equal(f.objects.size,1);const winner=results.find(r=>r.success).event;assert.equal((await fileRequest(f,winner.coverUrl)).status,200);
