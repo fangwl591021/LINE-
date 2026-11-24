@@ -83,10 +83,12 @@ test('existing full-contact card renders without profile API; odd button remains
   await Promise.all((await h.webhook([event()])).jobs);
   const message = h.replies[0].messages[0];
   assert.equal(message.type, 'flex');
-  const [like, copy, share] = message.contents.header.contents;
+  assert.equal(message.contents.header.contents.length, 2);
+  const [like, share] = message.contents.header.contents;
   assert.equal(like.action.type, 'uri');
-  assert.equal(copy.type, 'box');
-  assert.equal(copy.contents[0].text, '名片網址');
+  assert.deepEqual(Array.from(message.quickReply.items, item => item.action.label), ['編輯名片', '顯示名片', '名片網址']);
+  const copy = message.quickReply.items[2];
+  assert.equal(copy.type, 'action');
   assert.equal(copy.action.type, 'clipboard');
   assert.equal(copy.action.label, '名片網址');
   const copyUrl = new URL(copy.action.clipboardText);
