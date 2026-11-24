@@ -131,7 +131,7 @@ test('member activity private scope applies to catalog/detail/media and new regi
   assert.equal((await f.api('/'+e.id,{member:'guest'})).httpStatus,403);
   assert.equal((await f.api('/'+e.id+'/register',{member:'guest',data:{}})).httpStatus,403);
   assert.equal((await handleMemberEvents(new Request(e.coverUrl,{headers:{Authorization:'Bearer guest'}}),f.env,f.fetcher)).status,403);
-  f.sql.exec("UPDATE users SET network_id='group-a' WHERE row_id='guest'");assert.equal((await f.api('/overview',{member:'guest'})).sessions[0].id,e.id);
+  f.sql.exec("UPDATE users SET network_id=(SELECT line_id FROM users WHERE row_id='host') WHERE row_id='guest'");assert.equal((await f.api('/overview',{member:'guest'})).sessions[0].id,e.id);
   f.sql.exec("UPDATE users SET network_id='group-b' WHERE row_id='guest'");
   const saved=await f.api('/'+e.id+'/update',{data:{...f.input(),coverUrl:e.coverUrl,revision:0,visibility:'platform'}});assert.equal(saved.success,true);
   assert.equal((await f.api('/overview',{member:'guest'})).sessions[0].id,e.id);assert.equal((await f.api('/'+e.id+'/register',{member:'guest',data:{}})).success,true);
@@ -143,7 +143,7 @@ test('member old-client edits preserve choice, network is frozen, request retrie
   assert.equal((await f.create({...data,visibility:'platform'})).visibility,'network');
   f.sql.exec("UPDATE users SET network_id='moved-group' WHERE row_id='host'");
   const updated=await f.api('/'+e.id+'/update',{data:{...f.input(),revision:0}});assert.equal(updated.event.visibility,'network');
-  assert.equal(f.sql.prepare('SELECT network_id FROM member_hosted_events').get().network_id,'group-a');
+  assert.equal(f.sql.prepare('SELECT network_id FROM member_hosted_events').get().network_id,UIDS.host);
   assert.equal((await f.api('/'+e.id+'/update',{member:'guest',data:{...f.input(),revision:1,visibility:'platform'}})).httpStatus,403);
   for(const visibility of ['',null,true,'yes'])assert.equal((await f.api('/'+e.id+'/update',{data:{...f.input(),revision:1,visibility}})).code,'INVALID_VISIBILITY');
   assert.equal((await f.api('/'+e.id+'/update',{data:{...f.input(),revision:1,networkId:'group-b'}})).code,'INVALID_FIELDS');
