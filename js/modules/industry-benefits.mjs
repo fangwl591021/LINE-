@@ -7,6 +7,7 @@ const result = document.getElementById('analysis');
 const title = document.getElementById('analysis-title');
 const category = document.getElementById('category');
 const list = document.getElementById('angles');
+const builtinFeatures = document.getElementById('builtin-features-template');
 const profiles = [general, ...industries];
 let analyzedName = '';
 let inferred = null;
@@ -29,7 +30,12 @@ function render(profile) {
     const text = document.createElement('p');
     heading.textContent = label;
     text.textContent = profile.ideas[index];
-    item.append(heading, text);
+    item.append(heading);
+    if (index === 0) {
+      item.classList.add('builtin-angle');
+      item.append(builtinFeatures.content.cloneNode(true));
+    }
+    item.append(text);
     list.append(item);
   }
   result.hidden = false;
