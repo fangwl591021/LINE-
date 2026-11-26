@@ -18,7 +18,7 @@ let myCardModuleRequest;
 async function loadIslandMyCardModule() {
   if (window.MyCardModule?.createIslandCardFromProfile && window.MyCardModule?.selectIslandCardUpload) return window.MyCardModule;
   if (!myCardModuleRequest) myCardModuleRequest=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src=new URL('mycard.js?v=8.99&island=2',import.meta.url).href;
+    const script=document.createElement('script');script.src=new URL('mycard.js?v=8.99&island=2&ideas=1',import.meta.url).href;
     script.onload=()=>window.MyCardModule?.createIslandCardFromProfile?resolve(window.MyCardModule):reject(Error('名片設定尚未載入，請重試。'));
     script.onerror=()=>reject(Error('名片設定載入失敗，請重試。'));document.head.append(script);
   }).catch(error=>{myCardModuleRequest=null;throw error;});

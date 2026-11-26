@@ -64,6 +64,31 @@ test('only minimum business clues sent; no UID, private facts, image, keys or bu
   assert.equal(prepareCardBusinessInput({service:'可透過名片所列電話、電子郵件或網站聯絡洽詢。'}).context.service,'');
 });
 
+test('from-card ideas work without a public match and send only relevant text to the model',async t=>{
+  const f=fixture(t);
+  const idea={business:'設計網站與維護內容，整理企業的線上資訊。',advantage:'可主打從網站畫面到日常維護的連續服務。',introduction:
+    '我提供網站設計與維護。\n把企業的線上資訊整理清楚。\n從畫面到日常內容都能討論。\n歡迎交流你的網站需求。'};
+  f.setOutput({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(idea)}]}]});
+  const result=await generateCardBusinessCopy({...card,draftMode:'from_card',service:'網站設計與維護，整理企業的線上資訊。0912345678 [email@example.com](https://example.com)'},'可補充網站畫面及更新流程',f.env(),UID,f.fetcher);
+  assert.equal(result.success,true);
+  assert.equal(result.data.business,idea.business);assert.equal(result.data.advantage,idea.advantage);assert.equal(result.data.service,idea.introduction);
+  assert.deepEqual(result.data.sources,[]);
+  assert.deepEqual(f.calls.map(call=>call.url),['https://api.openai.com/v1/responses']);
+  const body=JSON.parse(f.calls[0].opts.body),input=JSON.parse(body.input);
+  assert.deepEqual(Object.keys(input),['company','jobTitle','service','brief']);
+  assert.doesNotMatch(body.input,/合成聯絡人|0912345678|example\.com/);
+  assert.equal(body.store,false);assert.equal(body.tools,undefined);assert.equal(body.text.format.strict,true);
+  const allowance=f.sql.prepare('SELECT * FROM partner_onboarding_ai_usage').get();
+  assert.equal(allowance.actor_uid,'card-business:'+UID);assert.equal(allowance.attempts,1);assert.equal(f.metrics.saves,0);
+});
+
+test('from-card identity alone asks for facts and skips quota and provider calls',async t=>{
+  const f=fixture(t);
+  const result=await generateCardBusinessCopy({...card,draftMode:'from_card',service:'姓名：合成聯絡人\n職稱：負責人'},'',f.env(),UID,f.fetcher);
+  assert.equal(result.success,false);assert.match(result.error,/補一兩項實際服務/);
+  assert.equal(f.metrics.analyses,0);assert.equal(f.writes.length,0);
+});
+
 test('different company, ambiguous and registration-only results cannot become business copy',async t=>{
   const f=fixture(t);
   for(const mode of ['different','ambiguous','registry','boilerplate']){

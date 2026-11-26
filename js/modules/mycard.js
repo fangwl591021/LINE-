@@ -2114,7 +2114,7 @@
             escapeHTML(displayDesc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
           '</button>' +
           '<button type="button" data-card-business-shortcut onclick="window.startMyCardBusinessCopy()" class="w-full mt-2 py-3 rounded-xl bg-emerald-600 text-white text-[14px] font-black">✨ AI 美化介紹 · 4～5 行</button>' +
-          '<p class="mt-2 text-[12px] text-slate-500">只有公司／職稱？點上方搜尋實際業務，核對草稿後再儲存。</p>' +
+          '<p class="mt-2 text-[12px] text-slate-500">從這張名片發想業務簡介、市場優勢和自我介紹。核對草稿後再儲存。</p>' +
         '</div>' +
         '<div class="px-5 pb-5"><div class="' + (cardLinksEditingV2 ? 'card-links-grid' : '') + '">' + buttonHtml + '</div>' +
           (cardLinksEditingV2 ? '<button type="button" onclick="window.completeMyCardLinks()" class="w-full my-3 py-3 rounded-xl border border-emerald-300 text-emerald-700 text-[14px] font-black">補齊名片聯絡連結</button>' : '') +
@@ -2152,13 +2152,15 @@
     if (status) status.textContent = message;
   }
 
-  async function generateMyCardBusinessCopy(btn) {
+  async function generateMyCardBusinessCopy(btn, mode) {
     if (!currentCardData || !wysiwygState.cfg || wysiwygState.field !== 'desc') return;
     if (cardBusinessRequest && !cardBusinessRequest.done && cardBusinessRequest.valid()) return;
     var input = document.getElementById('my-wysiwyg-desc-input');
     var brief = document.getElementById('my-card-business-brief');
     var panel = document.getElementById('my-card-business-result');
+    if (!input || !brief || !panel) return;
     var card = currentCardData, cfg = wysiwygState.cfg, actor = moduleAuth.getUserId();
+    var research = mode === 'research';
     var before = input.value, hint = brief.value;
     var context = JSON.stringify(cardBusinessInput(card, cfg, before));
     var request = { valid: function() {
@@ -2170,17 +2172,35 @@
     }};
     cardBusinessRequest = request; cardBusinessDraft = null;
     panel.replaceChildren();
-    if (btn) btn.disabled = true;
-    cardBusinessMessage('正在搜尋官網與公開社群、核對業務來源…原說明不會變更。');
+    var buttons = [btn, document.getElementById('my-card-business-generate'), document.getElementById('my-card-business-research')].filter(Boolean);
+    buttons.forEach(function(button) { button.disabled = true; });
+    cardBusinessMessage(research ? '正在搜尋官網與公開社群、核對業務來源…' : '正在依名片內容發想業務簡介、市場優勢和自我介紹…');
     try {
-      var result = await window.fetchAPI('generateCardCopy', {card: JSON.parse(context), brief: hint}, true);
+      var details = JSON.parse(context);
+      var payloadCard = research ? details : {draftMode: 'from_card', company: details.company, jobTitle: details.jobTitle, service: details.service};
+      var result = await window.fetchAPI('generateCardCopy', {card: payloadCard, brief: hint}, true);
       if (!request.valid()) return;
-      if (!result || result.success !== true) throw new Error(result && result.error || 'AI 搜尋暫時無法完成');
+      if (!result || result.success === false) throw new Error(result && result.error || 'AI 草稿暫時無法完成');
       var data = result.data || result;
-      if (!String(data.service || '').trim()) throw new Error('未取得可用的業務介紹');
+      if (typeof data.service !== 'string' || !data.service.trim()) throw new Error('未取得可用的業務介紹');
       var preview = document.createElement('p');
       preview.className = 'whitespace-pre-wrap text-sm leading-relaxed';
       preview.textContent = data.service;
+      if (data.draftMode === 'from_card') {
+        [
+          ['業務簡介', data.business],
+          ['市場優勢・可主打特色', data.advantage || '可補上你和同業不同的做法或代表案例，再發想。']
+        ].forEach(function(item) {
+          var heading = document.createElement('h3');
+          heading.className = 'mt-3 text-sm font-black text-emerald-800'; heading.textContent = item[0];
+          var paragraph = document.createElement('p');
+          paragraph.className = 'whitespace-pre-wrap text-sm leading-relaxed'; paragraph.textContent = item[1];
+          panel.appendChild(heading); panel.appendChild(paragraph);
+        });
+        var intro = document.createElement('h3');
+        intro.className = 'mt-3 text-sm font-black text-emerald-800'; intro.textContent = '自我介紹・可帶入名片';
+        panel.appendChild(intro);
+      }
       panel.appendChild(preview);
       (data.sources || []).slice(0,6).forEach(function(source) {
         try {
@@ -2198,11 +2218,11 @@
       use.onclick = applyMyCardBusinessCopy;
       panel.appendChild(use);
       cardBusinessDraft = {request: request, service: data.service};
-      cardBusinessMessage('草稿尚未帶入或儲存。' + (data.needsSourceReview ? '部分內容來自搜尋索引，請開啟來源確認。' : '') + (data.warnings || []).join(' '));
+      cardBusinessMessage((data.draftMode === 'from_card' ? '依這張名片與補充內容發想。請核對草稿，再選擇是否帶入自我介紹。' : '草稿尚未帶入或儲存。') + (data.needsSourceReview ? '部分內容來自搜尋索引，請開啟來源確認。' : '') + (data.warnings || []).join(' '));
     } catch (e) {
       if (request.valid()) cardBusinessMessage((e.message || 'AI 搜尋失敗') + ' 原說明未變更。');
     } finally {
-      if (btn && btn.isConnected) btn.disabled = false;
+      if (cardBusinessRequest === request) buttons.forEach(function(button) { if (button.isConnected) button.disabled = false; });
       if (cardBusinessRequest === request && !request.valid()) cardBusinessMessage('編輯內容已變更，未套用過期草稿；可重新搜尋。');
       // Retain the request identity for the explicit apply/race check, but
       // allow retry after a completed request without charging duplicate clicks.
@@ -2267,9 +2287,10 @@
           '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +
           '<textarea id="my-wysiwyg-desc-input" rows="5" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
           '<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">' +
-            '<button type="button" id="my-card-business-generate" onclick="window.generateMyCardBusinessCopy(this)" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-black disabled:opacity-50">AI 搜尋並美化說明</button>' +
-            '<p class="text-xs text-slate-600">自動用公司、網址、電話與公開社群核對實際業務，整理成 4～5 行短句：業務、特色與自然邀請。不用登記項目當介紹，先預覽來源，不自動儲存。</p>' +
-            '<input id="my-card-business-brief" maxlength="800" placeholder="品牌／區域／業務補充（選填，不必重填名片）" class="w-full rounded-lg border p-2 text-sm">' +
+            '<button type="button" id="my-card-business-generate" onclick="window.generateMyCardBusinessCopy(this)" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-black disabled:opacity-50">依名片內容產生草稿</button>' +
+            '<p class="text-xs text-slate-600">整理業務簡介、市場優勢和 4～5 行短句自我介紹。預覽後可把自我介紹帶入編輯，再決定是否儲存。</p>' +
+            '<input id="my-card-business-brief" maxlength="800" aria-label="補充名片資料" placeholder="補充服務／特色／代表案例（選填，不必重填名片）" class="w-full rounded-lg border p-2 text-sm">' +
+            '<button type="button" id="my-card-business-research" onclick="window.generateMyCardBusinessCopy(this, \'research\')" class="w-full min-h-11 px-2 rounded-xl border border-emerald-200 text-emerald-800 font-bold disabled:opacity-50">另外搜尋公開業務資料</button>' +
             '<p id="my-card-business-status" role="status" aria-live="polite" class="text-xs text-slate-600"></p>' +
             '<div id="my-card-business-result"></div>' +
           '</div>' +
