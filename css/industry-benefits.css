@@ -35,20 +35,34 @@ input, select { min-width: 0; min-height: 46px; width: 100%; border: 1px solid #
 .value { font-size: 17px; color: #2f4e43; }
 .category { margin-top: 16px; font-size: 14px; }
 .category select { display: block; margin-top: 5px; max-width: 280px; }
-.angles { padding: 0; margin: 17px 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.angles { padding: 0; margin: 17px 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
 .angles li { padding: 14px; border: 1px solid #dcebe2; border-radius: 12px; background: #f6faf7; }
-.angles .builtin-angle { grid-column: 1 / -1; }
+.angles .builtin-angle, .angles .partner-angle { grid-column: 1 / -1; }
 .builtin-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin: 0 0 10px; }
 .builtin-features dt { font-weight: 750; }
 .builtin-features dd { margin: 0; font-size: 14px; color: #2f4e43; }
 .builtin-angle > p { border-top: 1px solid #dcebe2; padding-top: 9px; }
+.industry-partners { border-top: 1px solid #dcebe2; margin-top: 12px; padding-top: 12px; }
+.industry-partners h4 { margin: 0 0 7px; font-size: 16px; color: #075844; }
+.partner-status:empty, .partner-list:empty { display: none; }
+.partner-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.partner-list article { background: #fff; border: 1px solid #dcebe2; border-radius: 9px; padding: 9px 10px; overflow-wrap: anywhere; }
+.partner-list a, .partner-actions a, .partner-actions button { color: #07684c; font-weight: 750; text-underline-offset: 3px; }
+.partner-list a { display: inline-flex; align-items: center; min-height: 44px; }
+.partner-list p, .partner-status { font-size: 14px; color: #2f4e43; }
+.partner-actions { display: flex; gap: 12px; align-items: center; margin-top: 5px; }
+.partner-actions a, .partner-actions button { display: inline-flex; align-items: center; min-height: 44px; }
+.partner-actions button { background: #fff; border: 1px solid #a5c5b6; border-radius: 8px; padding: 4px 10px; }
 .angles h3, .first-step h3 { font-size: 16px; color: #075844; margin-bottom: 4px; }
 .first-step { padding: 13px 15px; border-left: 4px solid #118364; background: #e9f6ee; border-radius: 9px; }
 .note { font-size: 13px; color: #49645a; margin: 12px 0; }
 @media (max-width: 450px) {
   main { padding-top: 14px; }
-  .input-row, .angles { grid-template-columns: 1fr; }
+  .input-row { grid-template-columns: 1fr; }
   .join { width: 100%; }
+}
+@media (max-width: 600px) {
+  .angles, .partner-list { grid-template-columns: 1fr; }
 }
 @media (max-width: 380px) {
   .builtin-features { grid-template-columns: 1fr; }

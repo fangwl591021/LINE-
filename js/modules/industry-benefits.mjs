@@ -1,4 +1,5 @@
 import {angles, general, industries, matchIndustry} from './industry-benefits-data.mjs?v=2';
+import {showIndustryPartners} from './industry-benefits-partners.mjs?v=1';
 
 const form = document.getElementById('industry-form');
 const input = document.getElementById('industry');
@@ -8,6 +9,7 @@ const title = document.getElementById('analysis-title');
 const category = document.getElementById('category');
 const list = document.getElementById('angles');
 const builtinFeatures = document.getElementById('builtin-features-template');
+const partnerTemplate = document.getElementById('industry-partners-template');
 const profiles = [general, ...industries];
 let analyzedName = '';
 let inferred = null;
@@ -37,6 +39,12 @@ function render(profile) {
     }
     item.append(text);
     list.append(item);
+    if (label === '尋找合作夥伴') {
+      item.classList.add('partner-angle');
+      const panel = partnerTemplate.content.firstElementChild.cloneNode(true);
+      item.append(panel);
+      showIndustryPartners(panel, profile.id);
+    }
   }
   result.hidden = false;
 }

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="輸入你的行業，查看點數通的內建功能、購物金、商城曝光與跨業合作如何應用在你的生意。">
   <title>行業加入分析｜點數通</title>
-  <link rel="stylesheet" href="css/industry-benefits.css?v=2">
-  <script type="module" src="js/modules/industry-benefits.mjs?v=3"></script>
+  <link rel="stylesheet" href="css/industry-benefits.css?v=3">
+  <script type="module" src="js/modules/industry-benefits.mjs?v=4"></script>
 </head>
 <body>
   <header class="top">
@@ -61,6 +61,17 @@
         <div><dt>行事曆</dt><dd>安排拜訪、預約、活動及回訪。</dd></div>
         <div><dt>智能配對</dt><dd>按產業、專長或合作需求尋找可能合適的對象。</dd></div>
       </dl>
+    </template>
+    <template id="industry-partners-template">
+      <div class="industry-partners">
+        <h4>已上架的合作對象</h4>
+        <p class="partner-status" role="status"></p>
+        <div class="partner-list"></div>
+        <div class="partner-actions">
+          <button type="button" hidden>重新讀取</button>
+          <a href="store-shop.html">瀏覽商城</a>
+        </div>
+      </div>
     </template>
   </main>
 </body>
