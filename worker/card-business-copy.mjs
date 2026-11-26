@@ -1,4 +1,4 @@
-import {generateCardBusinessDraft} from './store-ai-draft.mjs';
+import {generateCardBusinessDraft,generateCardSourceDraft} from './store-ai-draft.mjs';
 import {formatCardCopy,isIdentityOnlyCopy} from './card-copy-style.mjs';
 
 const text=(value,max)=>typeof value==='string'?value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').trim().slice(0,max):'';
@@ -19,8 +19,33 @@ export function prepareCardBusinessInput(card={},brief=''){
       service:isContactBoilerplate(service)||isIdentityOnlyCopy(service)?'':service,brief:text(brief,800)}
   };
 }
+function cardIdeaText(value,max){
+  return text(value,max).replace(/(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'')
+    .replace(/(?:\+886[\s-]?|0)(?:9[\s-]?\d{2}[\s-]?\d{3}[\s-]?\d{3}|[2-8][\s-]?\d{4}[\s-]?\d{4})/g,'')
+    .trim();
+}
+async function writeCardSourceIdeas(card,brief,env,uid,fetcher){
+  const source={
+    company:cardIdeaText(card.company||card.companyName,80),
+    jobTitle:cardIdeaText(card.jobTitle||card.title,120),
+    service:cardIdeaText(card.service||card.services,1600),
+    brief:cardIdeaText(brief,800)
+  };
+  if(isIdentityOnlyCopy(source.service))source.service='';
+  const insufficient={success:false,error:'名片上的業務資料不夠。可在下方補一兩項實際服務、做法或代表案例，再產生草稿。'};
+  if(!source.service&&!source.brief)return insufficient;
+  const draft=await generateCardSourceDraft(source,env,uid,fetcher);
+  const business=cardIdeaText(draft?.business,240),advantage=cardIdeaText(draft?.advantage,240);
+  const service=formatCardCopy(cardIdeaText(draft?.introduction,600));
+  if(!business)return insufficient;
+  if(!service||business.length>80||advantage.length>80||isIdentityOnlyCopy(business)||isContactBoilerplate(service)){
+    return {success:false,error:'這次的自我介紹格式不完整，請再產生一次。'};
+  }
+  return {success:true,data:{draftMode:'from_card',business,advantage,service,sources:[],warnings:[]}};
+}
 export async function generateCardBusinessCopy(card,brief,env,uid,fetcher=fetch){
   if(!uid)throw new Error('請重新登入後搜尋名片業務');
+  if(card?.draftMode==='from_card')return writeCardSourceIdeas(card,brief,env,uid,fetcher);
   const input=prepareCardBusinessInput(card,brief);
   const result=await generateCardBusinessDraft(input,env,uid,fetcher);
   const raw=text(result.fields?.description,600);
