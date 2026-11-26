@@ -4,13 +4,15 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('js/modules/mycard.js');
+const core=read('js/core.js');
+const fetchApi=core.slice(core.indexOf('    window.fetchAPI ='),core.indexOf('    // 強效配對機制'));
 const methods=source.slice(source.indexOf('  function cardBusinessInput('),source.indexOf('  function renderWysiwygEditor('));
 const render=source.slice(source.indexOf('  function renderWysiwygEditor('),source.indexOf('  function closeMyCardWysiwyg()'));
 const copy='提供網站設計與維護，\n讓線上資訊更清楚地呈現。\n從網站畫面到日常內容整理，\n歡迎交流你的網站需求。';
 const response={success:true,data:{service:copy,sources:[{url:'https://www.merchant.com/',title:'合成公司產品服務'}],warnings:[]}};
 const ideas={success:true,data:{service:copy,draftMode:'from_card',business:'提供網站設計與維護。',advantage:'網站畫面和日常內容可以一起整理。',sources:[],warnings:[]}};
 function element(){return {value:'',textContent:'',children:[],isConnected:true,classList:{contains:()=>false},appendChild(el){this.children.push(el);},replaceChildren(){this.children=[];}};}
-function fixture(api=async()=>response){
+function fixture(api=async()=>response.data){
   const ids=Object.fromEntries(['my-wysiwyg-desc-input','my-card-business-brief','my-card-business-result','my-card-business-status','my-card-wysiwyg-editor-modal'].map(k=>[k,element()]));
   ids['my-wysiwyg-desc-input'].value='原說明';
   const card={name:'合成聯絡人',company:'合成公司',phone:'0912345678',website:'www.merchant.com',title:'經理',services:'原說明',birthday:'private'};
@@ -33,7 +35,7 @@ test('research creates source preview only; explicit apply edits textbox, never 
 });
 
 test('from-card mode presents the three ideas, keeps the source text and applies only the introduction',async()=>{
-  const f=fixture(async()=>ideas);
+  const f=fixture(async()=>ideas.data);
   await f.run();
   const content=f.ids['my-card-business-result'].children;
   assert.deepEqual(content.slice(0,-1).map(item=>item.textContent),['業務簡介',ideas.data.business,'市場優勢・可主打特色',ideas.data.advantage,'自我介紹・可帶入名片',copy]);
@@ -83,7 +85,7 @@ test('Chromium mobile viewport: actual editor renders, searches, previews then a
     const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true});
     await page.route('**/*',route=>route.abort());
     await page.setContent('<style>.hidden{display:none}.flex{display:flex}button,input,textarea{box-sizing:border-box;width:100%;margin:4px 0;padding:10px}#my-card-wysiwyg-editor-modal{position:fixed;inset:0;padding:24px 16px;background:#eee}#pop{max-height:calc(100dvh - 3rem);overflow-y:auto;background:#fff;padding:16px}p{font:14px sans-serif}a{display:block}</style><div id="my-card-wysiwyg-editor-modal" class="hidden"><div id="pop"><button id="close">關閉</button><h3 id="my-card-wysiwyg-editor-title"></h3><div id="my-card-wysiwyg-editor-body"></div></div></div>');
-    await page.addScriptTag({content:`var currentCardData={name:'合成聯絡人',company:'合成公司',phone:'0912345678',website:'www.merchant.com'},wysiwygState={cfg:{desc:'原說明'},field:'desc'},cardBusinessRequest=null,cardBusinessDraft=null;var moduleAuth={getUserId:()=> 'owner'},apiCalls=[];function readCardValue(c,keys){return keys.map(k=>c[k]).find(Boolean)||''}function parseMyCardSocials(){return []}function escapeHTML(s){return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}function escapeAttr(s){return escapeHTML(s).replaceAll('"','&quot;')}function safeCssColor(s,f){return s||f}window.fetchAPI=async(a,p)=>{apiCalls.push(a);return p.card.draftMode==='from_card'?${JSON.stringify(ideas)}:${JSON.stringify(response)}};${methods}${render}window.generateMyCardBusinessCopy=generateMyCardBusinessCopy;window.applyMyCardWysiwygEditor=()=>{wysiwygState.cfg.desc=document.getElementById('my-wysiwyg-desc-input').value};document.getElementById('close').onclick=()=>{cardBusinessRequest=null;document.getElementById('my-card-wysiwyg-editor-modal').classList.add('hidden')};renderWysiwygEditor('desc');`});
+    await page.addScriptTag({content:`var currentCardData={name:'合成聯絡人',company:'合成公司',phone:'0912345678',website:'www.merchant.com'},wysiwygState={cfg:{desc:'原說明'},field:'desc'},cardBusinessRequest=null,cardBusinessDraft=null;var moduleAuth={getUserId:()=> 'owner'},apiCalls=[];function readCardValue(c,keys){return keys.map(k=>c[k]).find(Boolean)||''}function parseMyCardSocials(){return []}function escapeHTML(s){return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}function escapeAttr(s){return escapeHTML(s).replaceAll('"','&quot;')}function safeCssColor(s,f){return s||f}var Config={WORKER_URL:'https://worker.example.test'};window.fetch=async(url,options)=>{const{action,payload}=JSON.parse(options.body);apiCalls.push(action);return {ok:true,json:async()=>payload.card.draftMode==='from_card'?${JSON.stringify(ideas)}:${JSON.stringify(response)}}};${fetchApi}${methods}${render}window.generateMyCardBusinessCopy=generateMyCardBusinessCopy;window.applyMyCardWysiwygEditor=()=>{wysiwygState.cfg.desc=document.getElementById('my-wysiwyg-desc-input').value};document.getElementById('close').onclick=()=>{cardBusinessRequest=null;document.getElementById('my-card-wysiwyg-editor-modal').classList.add('hidden')};renderWysiwygEditor('desc');`});
     const closeEditor=source.slice(source.indexOf('  function closeMyCardWysiwygEditor()'),source.indexOf('  function editMyCardWysiwygField('));
     await page.evaluate(()=>{const meta=document.createElement('meta');meta.name='viewport';meta.content='width=device-width, initial-scale=1';document.head.appendChild(meta);});
     await page.addStyleTag({content:'.whitespace-pre-wrap{white-space:pre-wrap}textarea{font:15px/1.5 sans-serif}'});

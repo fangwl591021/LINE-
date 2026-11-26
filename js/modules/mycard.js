@@ -2180,9 +2180,9 @@
       var payloadCard = research ? details : {draftMode: 'from_card', company: details.company, jobTitle: details.jobTitle, service: details.service};
       var result = await window.fetchAPI('generateCardCopy', {card: payloadCard, brief: hint}, true);
       if (!request.valid()) return;
-      if (!result || result.success !== true) throw new Error(result && result.error || 'AI 搜尋暫時無法完成');
+      if (!result || result.success === false) throw new Error(result && result.error || 'AI 草稿暫時無法完成');
       var data = result.data || result;
-      if (!String(data.service || '').trim()) throw new Error('未取得可用的業務介紹');
+      if (typeof data.service !== 'string' || !data.service.trim()) throw new Error('未取得可用的業務介紹');
       var preview = document.createElement('p');
       preview.className = 'whitespace-pre-wrap text-sm leading-relaxed';
       preview.textContent = data.service;
