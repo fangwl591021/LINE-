@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="輸入你的行業，查看點數通的內建功能、購物金、商城曝光與跨業合作如何應用在你的生意。">
+  <title>行業加入分析｜點數通</title>
+  <link rel="stylesheet" href="css/industry-benefits.css?v=1">
+  <script type="module" src="js/modules/industry-benefits.mjs?v=1"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="index.html"><img src="assets/points-logo-transparent-20260916.png" width="38" height="38" alt="">點數通</a>
+      <a class="back" href="index.html">返回點數通</a>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="hero" aria-labelledby="title">
+      <h1 id="title">你的行業，<br>怎麼用點數通？</h1>
+      <p>輸入行業，看看有哪些功能值得先用，以及你可以找誰一起做生意。</p>
+    </section>
+    <section class="inquiry" aria-label="輸入行業">
+      <form id="industry-form">
+        <label for="industry">你的行業或主要服務</label>
+        <div class="input-row">
+          <input id="industry" type="text" maxlength="60" required placeholder="例如咖啡店、美甲工作室、民宿" autocomplete="off" aria-describedby="industry-error">
+          <button class="primary" type="submit">查看加入好處</button>
+        </div>
+        <p id="industry-error" class="error" role="alert" hidden></p>
+      </form>
+      <div class="examples" aria-label="試用行業範例">
+        <button type="button" data-example="咖啡店">咖啡店</button>
+        <button type="button" data-example="美甲工作室">美甲工作室</button>
+        <button type="button" data-example="健身教練">健身教練</button>
+        <button type="button" data-example="民宿">民宿</button>
+        <button type="button" data-example="企業顧問">企業顧問</button>
+      </div>
+      <noscript><p>請開啟 JavaScript 後使用行業分析。</p></noscript>
+    </section>
+    <section id="analysis" aria-labelledby="analysis-title" hidden>
+      <p class="matched" id="matched"></p>
+      <h2 id="analysis-title" tabindex="-1"></h2>
+      <p class="value" id="analysis-value"></p>
+      <label class="category" for="category">調整參考類別
+        <select id="category"></select>
+      </label>
+      <ul id="angles" class="angles"></ul>
+      <div class="first-step">
+        <h3>你可以先做這一步</h3>
+        <p id="first-step"></p>
+      </div>
+      <p class="note">活動、上架與購物金折抵依帳號資格、商品審核及店家設定。共用受眾指合作曝光，參與者可自行選擇是否聯絡。</p>
+      <a class="primary join" href="https://lin.ee/sDW7u4T">加入點數通 LINE 官方帳號</a>
+    </section>
+  </main>
+</body>
+</html>
