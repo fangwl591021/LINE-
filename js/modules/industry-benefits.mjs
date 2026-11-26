@@ -1,4 +1,4 @@
-import {angles, general, industries, matchIndustry} from './industry-benefits-data.mjs?v=1';
+import {angles, general, industries, matchIndustry} from './industry-benefits-data.mjs?v=2';
 
 const form = document.getElementById('industry-form');
 const input = document.getElementById('industry');
@@ -40,7 +40,7 @@ form.addEventListener('submit', event => {
   const value = input.value.trim();
   if (value.length > 60 || !/\p{L}/u.test(value)) {
     result.hidden = true;
-    error.textContent = '請輸入行業名稱，例如咖啡店、美甲工作室或民宿。';
+    error.textContent = '請輸入行業名稱，例如房仲、民宿或咖啡店。';
     error.hidden = false;
     input.setAttribute('aria-invalid', 'true');
     input.focus();
