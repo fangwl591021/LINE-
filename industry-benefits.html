@@ -3,76 +3,49 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="輸入你的行業，查看點數通的內建功能、購物金、商城曝光與跨業合作如何應用在你的生意。">
-  <title>行業加入分析｜點數通</title>
-  <link rel="stylesheet" href="css/industry-benefits.css?v=3">
-  <script type="module" src="js/modules/industry-benefits.mjs?v=4"></script>
+  <meta name="description" content="評估產業的回購、跨店導客與新客承接條件，探索適合洽談的合作夥伴。">
+  <title>產業合作評估｜點數通商機雷達</title>
+  <link rel="stylesheet" href="css/industry-benefits.css?v=4">
+  <script type="module" src="js/modules/industry-benefits.mjs?v=5"></script>
 </head>
 <body>
-  <header class="top">
-    <div class="wrap top-inner">
-      <a class="brand" href="index.html"><img src="assets/points-logo-transparent-20260916.png" width="38" height="38" alt="">點數通</a>
-      <a class="back" href="index.html">返回點數通</a>
-    </div>
-  </header>
+  <header class="top"><div class="wrap top-inner">
+    <span class="brand"><img src="assets/points-logo-transparent-20260916.png" width="26" height="26" alt="">點數通<span class="brand-divider">／</span><span>商機雷達</span></span>
+    <a class="back" href="index.html">返回首頁</a>
+  </div></header>
   <main class="wrap">
-    <section class="hero" aria-labelledby="title">
-      <h1 id="title">你的行業，<br>怎麼用點數通？</h1>
-      <p>輸入行業，看看有哪些功能值得先用，以及你可以找誰一起做生意。</p>
-    </section>
-    <section class="inquiry" aria-label="輸入行業">
+    <section class="search-box" aria-labelledby="main-title">
+      <h1 id="main-title">產業合作評估</h1>
+      <p class="lead">拜訪店家前，先看哪些服務能帶來回購、哪些產業可以互相介紹客人。</p>
       <form id="industry-form">
-        <label for="industry">你的行業或主要服務</label>
-        <div class="input-row">
-          <input id="industry" type="text" maxlength="60" required placeholder="例如房仲、民宿、咖啡店" autocomplete="off" aria-describedby="industry-error">
-          <button class="primary" type="submit">查看加入好處</button>
-        </div>
-        <p id="industry-error" class="error" role="alert" hidden></p>
+        <label for="industry">產業、職業或主要服務</label>
+        <div class="search-row"><input id="industry" type="text" maxlength="60" placeholder="例如室內設計師、民宿、會計師" autocomplete="off" required><button class="primary" type="submit">分析合作機會</button></div>
       </form>
-      <div class="examples" aria-label="試用行業範例">
-        <button type="button" data-example="咖啡店">咖啡店</button>
-        <button type="button" data-example="美甲工作室">美甲工作室</button>
-        <button type="button" data-example="健身教練">健身教練</button>
-        <button type="button" data-example="房仲">房仲</button>
-        <button type="button" data-example="旅宿">旅宿</button>
-        <button type="button" data-example="企業顧問">企業顧問</button>
+      <div class="examples" aria-label="試用產業範例">
+        <button type="button" data-example="財務規劃師">財務規劃師</button><button type="button" data-example="室內設計師">室內設計師</button><button type="button" data-example="餐廳">餐廳</button><button type="button" data-example="房仲">房仲</button><button type="button" data-example="旅宿">旅宿</button><button type="button" data-example="會計師">會計師</button>
       </div>
-      <noscript><p>請開啟 JavaScript 後使用行業分析。</p></noscript>
+      <div id="clarify" class="clarification" hidden><p role="status" id="clarify-text"></p><label for="profile">選擇接近的主要服務</label><select id="profile"></select></div>
+      <noscript><p>請開啟 JavaScript 以計算產業分數。</p></noscript>
     </section>
-    <section id="analysis" aria-labelledby="analysis-title" hidden>
-      <p class="matched" id="matched"></p>
-      <h2 id="analysis-title" tabindex="-1"></h2>
-      <p class="value" id="analysis-value"></p>
-      <label class="category" for="category">調整參考類別
-        <select id="category"></select>
-      </label>
-      <ul id="angles" class="angles"></ul>
-      <div class="first-step">
-        <h3>你可以先做這一步</h3>
-        <p id="first-step"></p>
+    <section id="report" hidden aria-labelledby="report-title">
+      <div class="scorecard">
+        <div><p class="caption">產業合作適合度</p><h2 id="report-title" tabindex="-1"></h2><p id="judgement"></p><p id="scenario" class="scenario"></p></div>
+        <div class="score-number"><strong id="score-total"></strong><span> / 100 分</span><div id="score-grade"></div></div>
       </div>
-      <p class="note">活動、上架與購物金折抵依帳號資格、商品審核及店家設定。共用受眾指合作曝光，參與者可自行選擇是否聯絡。</p>
-      <a class="primary join" href="https://lin.ee/sDW7u4T">加入點數通 LINE 官方帳號</a>
+      <div class="panel">
+        <h3>三重導客效益</h3><div id="groups"></div>
+        <details id="breakdown"><summary>查看十項給分理由</summary><div id="criteria"></div></details>
+        <details><summary>評估假設與等級</summary><div id="basis"></div><p class="fine">S 級 90 分起 · A 級 80 分起 · B 級 65 分起 · C 級 50 分起 · D 級低於 50 分。</p></details>
+      </div>
+      <div class="panel"><h3>優先洽談的合作產業</h3><p class="section-note" id="link-note"></p><div id="link-list"></div></div>
+      <div class="panel"><h3>已上架的潛在合作店家</h3><p class="section-note">依商城已上架店家的業種與服務比對。點店名查看公開店面，合作內容及折抵條件請與店家確認。</p><div id="partner-slot"></div></div>
+      <div class="panel"><h3>購物金怎麼用</h3><p id="points-strategy"></p><div id="cases"></div></div>
+      <div class="panel"><h3>拜訪與提案</h3><div id="pitch"></div></div>
+      <div class="panel"><h3>點數通可以怎麼幫忙</h3><div id="platform"></div></div>
+      <a class="join" href="https://lin.ee/sDW7u4T">加入點數通 LINE 官方帳號</a>
     </section>
-    <template id="builtin-features-template">
-      <dl class="builtin-features">
-        <div><dt>電子名片</dt><dd>分享服務、作品及聯絡方式。</dd></div>
-        <div><dt>名片收藏</dt><dd>整理客戶與合作夥伴名片，方便日後查找。</dd></div>
-        <div><dt>行事曆</dt><dd>安排拜訪、預約、活動及回訪。</dd></div>
-        <div><dt>智能配對</dt><dd>按產業、專長或合作需求尋找可能合適的對象。</dd></div>
-      </dl>
-    </template>
-    <template id="industry-partners-template">
-      <div class="industry-partners">
-        <h4>已上架的合作對象</h4>
-        <p class="partner-status" role="status"></p>
-        <div class="partner-list"></div>
-        <div class="partner-actions">
-          <button type="button" hidden>重新讀取</button>
-          <a href="store-shop.html">瀏覽商城</a>
-        </div>
-      </div>
-    </template>
+    <p class="footnote">分數依典型業者的服務情境估算。實際成效可用店家的回訪、兌用與跨店消費紀錄驗證。</p>
   </main>
+  <template id="partner-template"><div id="partner-panel"><p role="status"></p><div class="partner-list"></div><div class="partner-actions"><button type="button" hidden>重新讀取</button><a href="store-shop.html">瀏覽商城</a></div></div></template>
 </body>
 </html>
