@@ -222,16 +222,16 @@ test('pending annual receivable accepts a migrated current admin and keeps attri
  link('U' + '7'.repeat(32), A);
  const order = {orderId:'admin-pending', orderType:'tenant_annual_fee', buyerId:C, recruiterId:B,
   grossAmount:6300, netAmount:6000, taxAmount:300, taxRate:5, bv:3000};
- const create = (actor, orderId = order.orderId) => createTenantReceivable(f.env, {...order, orderId}, actor);
+ const create = (actor, orderId = order.orderId, buyerId = order.buyerId) => createTenantReceivable(f.env, {...order, orderId, buyerId}, actor);
  assert.equal((await create(A)).replayed, false);
  assert.equal((await create(A)).replayed, true);
  await assert.rejects(() => create(D, 'unauthorized'), /不可建立其他會員/);
  await assert.rejects(() => updatePartnerV2OrderStatus(f.env, {orderId:order.orderId, authenticatedUserId:A}, 'cancelled'), /移轉/);
  f.onBatch(() => link(A, E));
- await assert.rejects(() => create(A, 'former-identity'), /更新/);
+ await assert.rejects(() => create(A, 'former-identity', E), /更新/);
  f.sql.prepare('DELETE FROM user_identity_links WHERE old_line_id=?').run(A);
  f.onBatch(() => f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A));
- await assert.rejects(() => create(A, 'revoked'), /更新/);
+ await assert.rejects(() => create(A, 'revoked', E), /更新/);
  const rows = f.sql.prepare('SELECT payment_status,bonus_status,recruiter_id,sponsor_id,placement_parent_id FROM orders').all();
  assert.deepEqual(rows.map(row => Object.values(row)), [['pending_payment','review_required','','','']]);
  assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n, 0);
@@ -245,7 +245,7 @@ test('current migrated admin can confirm receipt once while attribution remains 
  const link = f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')");
  link.run(D, A);
  await createTenantReceivable(f.env, order, A);
- await createTenantReceivable(f.env, {...order,orderId:'race'}, A);
+ await createTenantReceivable(f.env, {...order,orderId:'race',buyerId:E}, A);
  const pay = (actor, orderId=order.orderId, extra={}) => markPartnerV2OrderPaid(f.env,
   {orderId, paymentProvider:'bank_transfer', authenticatedUserId:actor, ...extra});
  await assert.rejects(() => pay(C), /管理員/);

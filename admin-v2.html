@@ -921,23 +921,23 @@
           <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
               <h3 class="font-semibold text-slate-800">租戶年費訂單紀錄表</h3>
-              <p class="text-[12px] text-slate-500 mt-1">建立新訂單後可先收款。業績待管理員依簽署資料核對推薦人，再確認有效成交。</p>
+              <p class="text-[12px] text-slate-500 mt-1">先找會員或訂單，再查看收款和業績狀態。已有年費單時可直接處理原單。</p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-[minmax(260px,1fr)_120px_120px_auto] gap-2 w-full xl:w-[760px]">
               <div class="relative">
-                <input id="bonus-tenant-search" type="text" oninput="searchBonusTenants()" onfocus="searchBonusTenants()" placeholder="搜尋姓名、電話、會員編號、LINE ID..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                <input id="bonus-order-tenant" type="hidden">
-                <div id="bonus-tenant-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto"></div>
+                <input id="bonus-tenant-search" type="search" aria-label="搜尋年費會員或訂單" autocomplete="off" maxlength="100" oninput="searchBonusTenants()" placeholder="姓名、電話、會員編號、LINE ID 或訂單編號" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                <div id="bonus-tenant-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto" aria-label="會員搜尋結果"></div>
               </div>
               <input id="bonus-order-fee" type="number" value="6300" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="訂單金額">
               <input id="bonus-order-bv" type="number" value="3000" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="獎金 BV">
-              <button type="button" id="bonus-order-create" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+              <button disabled type="button" id="bonus-order-create" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40">
                 <span class="material-symbols-outlined text-[17px]">add_card</span> 建立訂單
               </button>
             </div>
           </div>
           <div class="px-5 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div class="flex items-center gap-2">
+              <span id="bonus-tenant-search-note" role="status" class="text-[12px] text-slate-600"></span>
               <span class="text-[12px] text-slate-500 font-bold">訂單狀態</span>
               <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; if (bonusOrderListReady) renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="all">全部</option>
@@ -945,6 +945,7 @@
                 <option value="project_waived">專案免收</option>
                 <option value="paid">已收款</option>
                 <option value="cancelled">已取消</option>
+                <option value="refunded">已退費</option>
               </select>
             </div>
             <div id="bonus-order-pager" class="flex items-center justify-end gap-2 text-[12px] text-slate-500 font-bold"></div>
@@ -1476,6 +1477,7 @@
 
   <!-- Scripts -->
   <script src="https://static.line-scdn.net/liff/edge/versions/2.31.2/sdk.js"></script>
+  <script src="js/modules/admin-annual-order-search.js?v=1"></script>
   <script>
     const LIFF_ID = "1660923784-vViMTZ1y";
     const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
@@ -1497,7 +1499,6 @@
     let allActivitiesData = [];
     let allBonusOrdersData = [];
     let settlementBatchesData = [];
-    let selectedBonusTenantId = '';
     let userPage = 1;
     let cardPage = 1;
     let bonusOrderPage = 1;
@@ -2043,11 +2044,11 @@
       if (tenantCountInput && (!tenantCountInput.value || Number(tenantCountInput.value) === 0)) {
         tenantCountInput.value = getTenantCountForBonus();
       }
-      selectedBonusTenantId = '';
-      const tenantInput = document.getElementById('bonus-order-tenant');
       const searchInput = document.getElementById('bonus-tenant-search');
-      if (tenantInput) tenantInput.value = '';
-      if (searchInput && !searchInput.value) searchInput.placeholder = '搜尋姓名、電話、會員編號、LINE ID...';
+      if (searchInput) searchInput.value = '';
+      bonusOrderListReady = false;
+      bonusOrderListReady = false;
+      searchBonusTenants();
       renderBonusSystem();
       await loadBonusOrders();
       initSettlementPeriod();
@@ -2065,20 +2066,6 @@
       }
     }
 
-    function getBonusTenantUsers() {
-      return (Array.isArray(allUsersData) ? allUsersData : [])
-        .filter(u => u && (u.userId || u.memberId || u.phone || u.name))
-        .sort((a, b) => {
-          const priority = role => {
-            role = String(role || '').toLowerCase();
-            if (role === 'store' || role === 'tenant') return 0;
-            if (role === 'admin') return 1;
-            return 2;
-          };
-          return priority(getSafeUserRole(a)) - priority(getSafeUserRole(b));
-        });
-    }
-
     function getUserSearchText(u) {
       return [
         u.userId,
@@ -2094,84 +2081,7 @@
       ].filter(Boolean).join(' ').toLowerCase();
     }
 
-    function normalizeSearchValue(value) {
-      return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-
-    function resolveBonusTenantFromInput() {
-      const hiddenId = document.getElementById('bonus-order-tenant')?.value || selectedBonusTenantId || '';
-      if (hiddenId) {
-        const selected = allUsersData.find(u => String(u.userId || u.memberId || '') === String(hiddenId));
-        if (selected) return selected;
-      }
-
-      const raw = document.getElementById('bonus-tenant-search')?.value || '';
-      const q = normalizeSearchValue(raw.split('/')[0] || raw);
-      if (!q) return null;
-      const users = getBonusTenantUsers();
-      const exact = users.find(u => {
-        const ids = [u.userId, u.memberId, u.name, u.phone, u.companyName].map(normalizeSearchValue);
-        return ids.some(v => v && v === q);
-      });
-      if (exact) return exact;
-      const partial = users.filter(u => getUserSearchText(u).includes(q));
-      return partial.length === 1 ? partial[0] : null;
-    }
-
-    function searchBonusTenants() {
-      const input = document.getElementById('bonus-tenant-search');
-      const box = document.getElementById('bonus-tenant-results');
-      if (!input || !box) return;
-      selectedBonusTenantId = '';
-      const hidden = document.getElementById('bonus-order-tenant');
-      if (hidden) hidden.value = '';
-
-      const q = input.value.trim().toLowerCase();
-      if (q.length < 1) {
-        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">輸入姓名、電話或 LINE ID 搜尋租戶</div>';
-        box.classList.remove('hidden');
-        return;
-      }
-
-      const matches = getBonusTenantUsers()
-        .filter(u => getUserSearchText(u).includes(q))
-        .slice(0, 20);
-
-      if (!matches.length) {
-        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">找不到符合的租戶</div>';
-        box.classList.remove('hidden');
-        return;
-      }
-
-      box.innerHTML = matches.map(u => {
-        const id = escapeHTML(u.userId || u.memberId || '');
-        const name = escapeHTML(u.name || '未命名');
-        const phone = escapeHTML(u.phone || '-');
-        const network = escapeHTML(u.networkId || u.storeId || 'admin');
-        const role = escapeHTML((u.role || 'user').toUpperCase());
-        return `<button type="button" onclick="selectBonusTenant('${id}')" class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50">
-          <div class="flex items-center justify-between gap-3">
-            <div class="font-black text-slate-800 text-sm">${name}</div>
-            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">${role}</span>
-          </div>
-          <div class="text-[12px] text-slate-500 mt-0.5">${phone} / ${network}</div>
-          <div class="text-[10px] text-slate-300 font-mono mt-1">${id}</div>
-        </button>`;
-      }).join('');
-      box.classList.remove('hidden');
-    }
-
-    function selectBonusTenant(userId) {
-      const user = allUsersData.find(u => String(u.userId || u.memberId || '') === String(userId));
-      if (!user) return;
-      selectedBonusTenantId = user.userId || user.memberId || '';
-      const hidden = document.getElementById('bonus-order-tenant');
-      const input = document.getElementById('bonus-tenant-search');
-      const box = document.getElementById('bonus-tenant-results');
-      if (hidden) hidden.value = selectedBonusTenantId;
-      if (input) input.value = `${user.name || '未命名'} / ${user.phone || '-'} / ${user.networkId || user.storeId || 'admin'}`;
-      if (box) box.classList.add('hidden');
-    }
+    function searchBonusTenants() { window.AnnualOrderSearch.search(); }
 
     function findAdminUser(userId) {
       return (Array.isArray(allUsersData) ? allUsersData : []).find(u => String(u.userId || u.memberId || '') === String(userId || '')) || null;
@@ -2277,10 +2187,11 @@
       return {
         orderId: order.orderId || order.id || order.rowId || '',
         tenantId: order.tenantId || order.buyerId || order.userId || '',
+        orderType: order.orderType || 'tenant_annual_fee',
         tenantName: order.tenantName || order.buyerName || order.name || '',
         fee: order.bonusPolicyType === 'project_exception' ? 0 : Number(order.fee || order.price || order.amount || 0),
         bv: order.bonusPolicyType === 'project_exception' ? 0 : Number(order.bv || order.bonusBV || order.bonusAmount || 0),
-        status: order.status || 'pending_payment',
+        status: order.status || order.paymentStatus || 'pending_payment',
         paymentProvider: order.paymentProvider || order.paymentMethod || order.gateway || 'manual',
         paymentNo: order.paymentNo || order.tradeNo || '',
         sponsorId: order.sponsorId || order.recruiterId || order.referrerId || '',
@@ -2297,6 +2208,7 @@
       };
     }
 
+    let bonusPanelOrders = [];
     let bonusOrderRequest = 0;
     let bonusOrderListReady = false;
 
@@ -2306,6 +2218,7 @@
       const pager = document.getElementById('bonus-order-pager');
       if (!body || !pager) return;
       bonusOrderListReady = false;
+      window.AnnualOrderSearch?.sync(bonusPanelOrders, false, creatingTenantOrder);
       body.innerHTML = '<tr><td colspan="8" class="text-center py-8">載入訂單中…</td></tr>';
       pager.textContent = '';
       const actor = adminProfile?.userId;
@@ -2314,27 +2227,33 @@
       try {
         if (!sameLogin()) throw new Error('login');
         const orders = [];
-        for (let page = 1; ; page++) {
-          const rows = await fetchAPI('mlmListOrders', {
-            orderType: 'tenant_annual_fee', status: 'all', page, pageSize: 100
-          }, { silent: true, throwOnError: true });
-          if (requestId !== bonusOrderRequest) return;
-          if (!sameLogin()) throw new Error('login');
-          if (!Array.isArray(rows)) throw new Error('invalid order list');
-          orders.push(...rows.map(normalizeBonusOrder));
-          if (rows.length < 100) break;
+        for (const orderType of ['tenant_annual_fee','tenant_renewal_fee']) {
+          for (let page = 1; ; page++) {
+            const rows = await fetchAPI('mlmListOrders', {
+              orderType, status: 'all', page, pageSize: 100
+            }, { silent: true, throwOnError: true });
+            if (requestId !== bonusOrderRequest) return;
+            if (!sameLogin()) throw new Error('login');
+            if (!Array.isArray(rows)) throw new Error('invalid order list');
+            orders.push(...rows.map(normalizeBonusOrder));
+            if (rows.length < 100) break;
+          }
         }
-        allBonusOrdersData = orders;
+        orders.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+        bonusPanelOrders = orders;
+        allBonusOrdersData = orders.filter(order => order.orderType === 'tenant_annual_fee');
         bonusOrderListReady = true;
         bonusOrderPage = 1;
         renderBonusOrders();
       } catch (error) {
         if (requestId !== bonusOrderRequest) return;
+        bonusPanelOrders = [];
         allBonusOrdersData = [];
         bonusOrderListReady = false;
         pager.textContent = '';
         const loginRequired = !sameLogin() || /access denied|token|登入|授權/i.test(error.message);
         const message = loginRequired ? '請重新登入有權限的 LINE 帳號後再查看訂單。' : '未能取得訂單紀錄，請重新讀取。';
+        window.AnnualOrderSearch?.sync(bonusPanelOrders, false, creatingTenantOrder);
         body.innerHTML = '<tr><td colspan="8" class="text-center py-8">' + message +
           ' <button type="button" class="text-blue-700 underline" onclick="loadBonusOrders()">重新讀取</button></td></tr>';
       }
@@ -2344,7 +2263,9 @@
       const body = document.getElementById('bonus-orders-body');
       if (!body) return;
       const statusFilter = document.getElementById('bonus-order-status-filter')?.value || 'all';
-      const filtered = allBonusOrdersData.filter(order => {
+      window.AnnualOrderSearch?.sync(bonusPanelOrders, bonusOrderListReady, creatingTenantOrder);
+      const filtered = bonusPanelOrders.filter(order => {
+        if (window.AnnualOrderSearch && !window.AnnualOrderSearch.orderMatches(order)) return false;
         if (statusFilter === 'all') return true;
         if (statusFilter === 'paid') return order.status === 'paid' || order.status === 'completed';
         if (statusFilter === 'cancelled') return order.status === 'cancelled' || order.status === 'void';
@@ -2352,7 +2273,7 @@
       });
 
       if (!filtered.length) {
-        body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有租戶年費訂單</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有符合條件的年費訂單</td></tr>';
         renderBonusOrderPager(0);
         return;
       }
@@ -2363,9 +2284,9 @@
 
       body.innerHTML = pageOrders.map(order => {
         const paid = order.status === 'paid' || order.status === 'completed';
-        const cancelled = order.status === 'cancelled' || order.status === 'void';
+        const cancelled = order.status === 'cancelled' || order.status === 'void' || order.status === 'refunded';
         const statusClass = paid ? 'status-green' : (cancelled ? 'status-red' : 'status-amber');
-        const statusText = order.status === 'project_waived' ? '專案免收' : paid ? '已收款' : (cancelled ? '已取消' : '待收款');
+        const statusText = order.status === 'project_waived' ? '專案免收' : order.status === 'refunded' ? '已退費' : paid ? '已收款' : (cancelled ? '已取消' : '待收款');
         const fee = Number(order.fee || order.price || order.grossAmount || 0);
         const bv = Number(order.bv || order.bonusBV || 0);
         const createdAt = formatDisplayTime(order.createdAt) || '-';
@@ -2412,21 +2333,18 @@
     let creatingTenantOrder = false;
     async function createTenantBonusOrder() {
       if (creatingTenantOrder) return;
-      const tenant = resolveBonusTenantFromInput();
-      if (!tenant) return showToast('請先選擇租戶，或輸入完整姓名/電話/LINE ID', true);
-      const tenantId = tenant.userId || tenant.memberId || '';
-      if (!tenantId) return showToast('此租戶缺少會員 ID，請先同步用戶資料', true);
-      selectedBonusTenantId = tenantId;
-      const hidden = document.getElementById('bonus-order-tenant');
-      if (hidden) hidden.value = tenantId;
+      const tenant = window.AnnualOrderSearch.current();
+      if (!tenant || !bonusOrderListReady || adminRole !== 'admin') return showToast('請先選擇會員並確認既有訂單', true);
+      if (tenant.identityReview || tenant.hasExistingOrder || window.AnnualOrderSearch.activeOrders(tenant, bonusPanelOrders).length) {
+        return showToast('請查看原年費單，或先核對會員帳號關聯。', true);
+      }
+      const tenantId = tenant.userId;
       const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
       if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
       const taxRate=Number(document.getElementById('bonus-tax-rate')?.value || 5);
       const signature=JSON.stringify([adminProfile.userId,tenantId,fee,bv,taxRate]);
       if (!pendingOrderAttempt || pendingOrderAttempt.signature!==signature) {
-        const alreadyPending=allBonusOrdersData.some(o=>o.tenantId===tenantId && o.status==='pending_payment');
-        if(alreadyPending && !confirm('這位租戶已有待收款訂單。確定要另外建立一筆年費訂單嗎？')) return;
         pendingOrderAttempt={signature,id:'ORD-'+crypto.randomUUID()};
       }
       creatingTenantOrder=true;
@@ -2451,17 +2369,23 @@
         paymentProvider: 'bank_transfer',
         paymentMethod: 'bank_transfer',
         paymentLabel: '匯款付款'
-      });
+      }, {silent:true, throwOnError:true});
       if (res) {
         pendingOrderAttempt=null;
         showToast('租戶年費訂單已建立，等待收款');
         await loadBonusOrders();
       }
-      } finally { creatingTenantOrder=false;button.disabled=false; }
+      } catch (error) {
+        showToast(error.message || '建立結果待核對，請先查看訂單紀錄。', true);
+        await loadBonusOrders();
+      } finally {
+        creatingTenantOrder=false;
+        window.AnnualOrderSearch.sync(bonusPanelOrders, bonusOrderListReady, creatingTenantOrder);
+      }
     }
 
     async function markTenantOrderPaid(orderId) {
-      const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
+      const order = bonusPanelOrders.find(o => String(o.orderId) === String(orderId));
       if (!order) return showToast('找不到訂單', true);
       if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n請核對實際收款。業務推薦與獎金另依訂單制度核對。`)) return;
       if (order.bonusPolicyType === 'signed_referral_pending' || order.raw?.signedReviewKey) {
