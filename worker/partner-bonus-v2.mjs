@@ -4,6 +4,7 @@ import {POLICY_11511,TEMPLATE_11511,SOURCE_11511} from './partner-renewal-11511.
 import {authenticatedUid,authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {readJson,ShopError} from './store-shop.mjs';
 import {findMemberReferrer} from './member-number.mjs';
+import {annualOrderCollisionSql,annualOrderCollisionMessage,searchAnnualOrderBuyers} from './annual-order-buyers.mjs';
 import {PARTNER_POLICY_11510,PARTNER_TEMPLATE_11510,PARTNER_POLICY_CUTOVER,createPartnerPolicy11510} from './partner-policy-11510.mjs';
 import {handlePartnerSettlement11510,readPartnerSettlement11510} from './partner-settlement-11510.mjs';
 
@@ -142,9 +143,16 @@ export async function createTenantReceivable(env, order, actorUid) {
  // A current admin can record a receivable after migration. Former identities still fail at write time.
  const currentAdmin=actor && actor.line_id===actorUid && ['admin','總管'].includes(actor.role);
  const claim=clockClaim(db,revision,key,actor,currentAdmin?['old_line_id']:BOTH_LINK_IDS);
- const result=await db.batch([claim,db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,JSON.stringify(value),at),revision+1,key,order.buyerId)]);
- if(!result[0].meta.changes)fail('權限或資料已更新，請重試',409);
+ const blockNewInitial=order.orderType==='tenant_annual_fee';
+ const collision=()=>first(db,annualOrderCollisionSql+' LIMIT 1',order.buyerId,order.orderId);
+ if(blockNewInitial && !await first(db,'SELECT 1 FROM orders WHERE order_id=?',order.orderId) && await collision())fail(annualOrderCollisionMessage,409);
+ const result=await db.batch([claim,db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) AND (?=0 OR NOT EXISTS(${annualOrderCollisionSql})) ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,JSON.stringify(value),at),revision+1,key,order.buyerId,blockNewInitial?1:0,order.buyerId,order.orderId)]);
+ if(!result[0].meta.changes){
+  if(blockNewInitial && await collision())fail(annualOrderCollisionMessage,409);
+  fail('權限或資料已更新，請重試',409);
+ }
  const row=await first(db,'SELECT * FROM orders WHERE order_id=?',order.orderId);
+ if(!row && blockNewInitial && await collision())fail(annualOrderCollisionMessage,409);
  if(!sameOrder(row,order))fail('訂單內容不一致',409);
  return {success:true,data:savedOrder(row),replayed:!result[1].meta.changes};
 }
@@ -411,9 +419,10 @@ export async function handlePartnerContracts(request,env,profileMapper,fetcher=f
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});
  try{
   const route=url.pathname.slice(BASE.length);
-  const orderReview=(request.method==='GET' && (route==='' || route==='/lookup')) || (request.method==='POST' && route==='/order-referral');
+  const orderReview=(request.method==='GET' && (route==='' || route==='/lookup' || route==='/annual-order-buyers')) || (request.method==='POST' && route==='/order-referral');
   const authorize=orderReview?authorizeOrderReviewAdmin:authorizeStoreAdmin;
   const {uid,db,actor}=await authorize(request,env,profileMapper,fetcher);
+  if(request.method==='GET'&&route==='/annual-order-buyers')return reply(await searchAnnualOrderBuyers(db,url.searchParams,fail));
   if(request.method==='GET'&&route==='/lookup'){
    if([...url.searchParams.keys()].some(k=>k!=='memberNumber')||url.searchParams.getAll('memberNumber').length!==1)fail('請輸入一組會員編號');
    const number=url.searchParams.get('memberNumber');if(!/^\d{11,20}$/.test(number||''))fail('會員編號格式不正確');

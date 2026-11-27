@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {rewardFixture,ADMIN as A,REWARD as B,OTHER as C,mapper} from './fixtures/reward-unit-directory.mjs';
-import {PARTNER_POLICY_VERSION as VERSION,calculatePartnerBonusV2,handlePartnerContracts,createPartnerV2Order,markPartnerV2OrderPaid,updatePartnerV2OrderStatus} from '../worker/partner-bonus-v2.mjs';
+import {PARTNER_POLICY_VERSION as VERSION,calculatePartnerBonusV2,handlePartnerContracts,createPartnerV2Order,createTenantReceivable,markPartnerV2OrderPaid,updatePartnerV2OrderStatus} from '../worker/partner-bonus-v2.mjs';
 const D='U'+'d'.repeat(32),E='U'+'e'.repeat(32),G='U'+'f'.repeat(32);
 const then=()=>new Date(Date.now()-86400000).toISOString();
 function fixture(t){
@@ -24,6 +24,44 @@ function fixture(t){
  return f;
 }
 const facts=(extra={})=>({orderType:'tenant_annual_fee',netAmount:6000,recruiterUid:B,priorValidDeals:0,selfPurchased:true,directSponsor:A,directSponsorEligible:true,chainComplete:true,upline:[{uid:A,eligible:true,advanced:true}],...extra});
+test('annual order buyer lookup finds real members and historical orders only for an authenticated admin',async t=>{
+ const f=fixture(t);
+ f.sql.exec("ALTER TABLE users ADD COLUMN network_id TEXT DEFAULT 'admin'");
+ const update=f.sql.prepare('UPDATE users SET name=?,member_number=?,phone=? WHERE line_id=?');
+ update.run('許淑貞 JoJo','20261021009','+886 912-345-678',C);
+ update.run('同名 許淑貞','20261021010','0912345678',D);
+ f.legacyOrder('sample-existing',C);
+ for(const q of ['許淑貞',' ＪｏＪｏ ','20261021009','0912 345 678',C]){
+  const result=await f.call('/annual-order-buyers?q='+encodeURIComponent(q));
+  assert.equal(result.http,200,JSON.stringify(result));
+  const buyer=result.members.find(member=>member.userId===C);
+  assert(buyer?.hasExistingOrder, q);
+  assert.equal(buyer.phoneEnd,'678');
+  assert(!JSON.stringify(result).includes('345-678'));
+ }
+ assert.equal((await f.call('/annual-order-buyers?q=JoJo',null,'user')).http,403);
+ assert.equal((await f.call('/annual-order-buyers?q=JoJo',null,'bad')).http,401);
+ assert.equal((await f.call('/annual-order-buyers?q=JoJo&q=other')).http,400);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM orders').get().n,1);
+});
+test('initial fees are idempotent, reject parallel or linked duplicates, and leave renewal and cancelled history usable',async t=>{
+ const f=fixture(t);
+ const order=(orderId,buyerId=C,orderType='tenant_annual_fee')=>({orderId,buyerId,orderType,buyerName:'測試',networkId:'admin',
+  productCode:'ANNUAL',productName:'租戶年費',grossAmount:6300,netAmount:6000,taxAmount:300,taxRate:5,bv:3000,currency:'TWD',paymentProvider:'bank_transfer'});
+ const attempts=await Promise.allSettled([createTenantReceivable(f.env,order('first'),A),createTenantReceivable(f.env,order('other-tab'),A)]);
+ assert.equal(attempts.filter(result=>result.status==='fulfilled').length,1);
+ const saved=f.sql.prepare('SELECT order_id FROM orders WHERE buyer_id=?').all(C);
+ assert.equal(saved.length,1);
+ assert.equal((await createTenantReceivable(f.env,order(saved[0].order_id),A)).replayed,true);
+ f.sql.prepare("UPDATE orders SET payment_status='paid' WHERE buyer_id=?").run(C);
+ await assert.rejects(()=>createTenantReceivable(f.env,order('used'),A),/已有年費訂單/);
+ f.sql.prepare("INSERT INTO user_identity_links(old_line_id,new_line_id,status) VALUES(?,?,'active')").run(C,D);
+ await assert.rejects(()=>createTenantReceivable(f.env,order('alias',D),A),/已有年費訂單/);
+ assert.equal((await createTenantReceivable(f.env,order('renewal',C,'tenant_renewal_fee'),A)).success,true);
+ await createTenantReceivable(f.env,order('cancelled',E),A);
+ f.sql.exec("UPDATE orders SET payment_status='cancelled' WHERE order_id='cancelled'");
+ assert.equal((await createTenantReceivable(f.env,order('after-cancel',E),A)).success,true);
+});
 test('new paid policy first two, pass-up, differential and third full share are bounded by actual 50%',()=>{
  for(const priorValidDeals of [0,1])assert.deepEqual(calculatePartnerBonusV2(facts({priorValidDeals})).transactions.map(t=>[t.memberId,t.amount]),[[B,1500],[A,1500]]);
  assert.deepEqual(calculatePartnerBonusV2(facts({selfPurchased:false})).transactions.map(t=>[t.memberId,t.bonusType,t.amount]),[[A,'first_two_passup',1500],[A,'advanced_differential',1500]]);

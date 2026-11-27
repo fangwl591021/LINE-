@@ -10,22 +10,23 @@ for (const file of ['admin.html','admin-v2.html']) {
     const list=extract('    function normalizeBonusOrder','    async function createTenantBonusOrder');
     const nodes=Object.fromEntries(['bonus-order-pager','bonus-orders-body','bonus-order-status-filter'].map(id=>[id,{innerHTML:'',textContent:'',value:'all'}]));
     let mode='full',token='fixture';const calls=[];
-    const ctx={document:{getElementById:id=>nodes[id]},adminProfile:{userId:'admin-test'},adminRole:'admin',adminNetworkId:'admin',
+    const ctx={window:{},document:{getElementById:id=>nodes[id]},adminProfile:{userId:'admin-test'},adminRole:'admin',adminNetworkId:'admin',
       liff:{isLoggedIn:()=>!!token,getAccessToken:()=>token},WORKER_URL:'https://fixture.invalid',AbortController,setTimeout,clearTimeout,
       escapeHTML:String,formatDisplayTime:String,formatCurrency:String,BONUS_POLICY_TYPE:1,allBonusOrdersData:[],bonusOrderPage:1,BONUS_ORDER_PAGE_SIZE:20,
       fetch:async(url,options)=>{
         const {action,payload}=JSON.parse(options.body);calls.push(action);assert.equal(action,'mlmListOrders');
-        assert.equal(payload.lineAccessToken,'fixture');assert.equal(payload.userId,'admin-test');assert.equal(payload.orderType,'tenant_annual_fee');
+        assert.equal(payload.lineAccessToken,'fixture');assert.equal(payload.userId,'admin-test');
+        assert(['tenant_annual_fee','tenant_renewal_fee'].includes(payload.orderType));
         if(mode==='error')return {json:async()=>({success:false,error:'invalid token'})};
-        const rows=mode==='empty'?[]:Array.from({length:payload.page===1?100:1},(_,i)=>({orderId:'T'+payload.page+'-'+i,tenantName:'測試租戶',fee:6300,bv:3000,status:'paid'}));
+        const rows=mode==='empty'?[]:Array.from({length:payload.page===1?100:1},(_,i)=>({orderId:payload.orderType+'-'+payload.page+'-'+i,orderType:payload.orderType,tenantName:'測試租戶',fee:6300,bv:3000,status:'paid'}));
         return {json:async()=>({success:true,data:rows})};
       }};
     vm.runInNewContext(api+'\n'+list,ctx);
     await ctx.loadBonusOrders();assert.equal(ctx.allBonusOrdersData.length,101);assert.match(nodes['bonus-orders-body'].innerHTML,/測試租戶/);
-    assert.equal(calls.length,2);mode='error';await ctx.loadBonusOrders();
+    assert.equal(calls.length,4);mode='error';await ctx.loadBonusOrders();
     assert.match(nodes['bonus-orders-body'].innerHTML,/重新登入/);assert.match(nodes['bonus-orders-body'].innerHTML,/重新讀取/);
     assert.equal(nodes['bonus-order-pager'].textContent,'');assert.equal(ctx.allBonusOrdersData.length,0);
-    mode='empty';await ctx.loadBonusOrders();assert.match(nodes['bonus-orders-body'].innerHTML,/目前沒有租戶年費訂單/);
+    mode='empty';await ctx.loadBonusOrders();assert.match(nodes['bonus-orders-body'].innerHTML,/目前沒有符合條件的年費訂單/);
     assert.match(nodes['bonus-order-pager'].innerHTML,/0 筆/);token='';const count=calls.length;
     await ctx.loadBonusOrders();assert.equal(calls.length,count);assert.match(nodes['bonus-orders-body'].innerHTML,/重新登入/);
   });
