@@ -23,21 +23,76 @@
     return pending;
   }
   // Static preparation only: the existing auth flow remains the sole route owner.
+  const chatSections = new Set(['chat-apply','chat-application-status','chat-store','chat-products']);
+  window.isStoreChatSection = section => chatSections.has(section);
   window.prepareStoreManageEntry = function(params) {
-    const allowed = new Set(['shopSection', 'liff.state', 'code', 'state', 'liffClientId', 'liffRedirectUri', 'friendship_status_changed']);
-    if (!params || !['manage', 'new-product'].includes(params.get('shopSection')) || params.getAll('shopSection').length !== 1 ||
+    const allowed = new Set(['shopSection', 'liff.state', 'liff.referrer', 'code', 'state', 'liffClientId', 'liffRedirectUri', 'friendship_status_changed']);
+    if (!params || !(['manage', 'new-product'].includes(params.get('shopSection')) || chatSections.has(params.get('shopSection'))) || params.getAll('shopSection').length !== 1 ||
         [...params.keys()].some(key => !allowed.has(key)) || window.location.hash) return false;
-    void load().catch(() => {}); // The normal open action retries a failed preload.
+    if (!['chat-apply','chat-application-status'].includes(params.get('shopSection'))) void load().catch(() => {});
     return true;
   };
-  window.showStoreManagePending = function(failed = false) {
+  function backToChat() {
+    if (window.liff?.isInClient?.() && window.liff?.closeWindow) window.liff.closeWindow();
+    else window.location.assign('https://lin.ee/sDW7u4T');
+  }
+  window.openStoreChatEntry = async function(section, registered) {
+    if (!chatSections.has(section)) return;
+    const application = ['chat-apply','chat-application-status'].includes(section);
+    const merchant = ['store','店長','admin','總管'].includes(String(window.userRole||'').toLowerCase());
+    if (registered && merchant && !application) {
+      await window.openStoreShop('', '', '', section==='chat-products'?'new-product':'manage', '',
+        {onBack:backToChat,backLabel:'返回聊天室'});
+      return;
+    }
     window.goPage('store-shop', true);
     const root = document.getElementById('page-store-shop');
-    root.innerHTML = '<h2>我的商城管理</h2><p role="status" aria-live="polite"></p><button type="button" onclick="window.goPage(\'home\')">返回首頁</button>';
-    root.querySelector('p').textContent = failed ? '暫時無法確認會員資料，請重新連線後重試。' : '正在確認會員資料，商城管理準備中…';
+    root.innerHTML = '<section class="store-chat-entry"><h2>雙向完整版店家</h2><p role="status"></p><button type="button" data-chat-close>返回聊天室</button> <button type="button" data-chat-open></button></section>';
+    root.querySelector('[data-chat-close]').onclick = backToChat;
+    const status = root.querySelector('p'), button = root.querySelector('[data-chat-open]');
+    if (!registered) {
+      status.textContent = '先完成會員註冊，再回聊天室輸入 888 申請店家。';
+      button.textContent = '開始註冊';
+      button.onclick = () => window.openProfileRegistrationPanel?.();
+      return;
+    }
+    status.textContent = '在 LINE 內查看與管理您的店家申請。';
+    if (!application) {
+      status.textContent = '目前的 LINE 帳號尚未開通雙向完整版，可查看申請狀態。';
+      section = 'chat-application-status';
+    }
+    const owner = window.currentUserProfile?.userId, token = window.liff?.getAccessToken?.();
+    const isCurrent = () => root.isConnected && root.contains(button) && window.currentPage==='store-shop' &&
+      !!token && window.liff?.getAccessToken?.()===token && window.currentUserProfile?.userId===owner;
+    button.textContent = section==='chat-apply'?'開啟店家申請':'查看申請進度';
+    async function open() {
+      button.disabled = true;
+      try {
+        const module = await import('./reward-applications.js?v=6&contract=11511&tabs=2&reviewNote=2&chat888=1');
+        if (isCurrent()) await module.openRewardApplications({base:window.WORKER_URL,kind:'full',isCurrent,
+          initialView:section==='chat-apply'?'form':'list'});
+      } catch {
+        if (isCurrent()) status.textContent = '暫時無法開啟申請，請重試。';
+      } finally {
+        if (isCurrent()) button.disabled = false;
+      }
+    }
+    button.onclick = open;
+    await open();
+  };
+  window.showStoreManagePending = function(failed = false, section = '') {
+    window.goPage('store-shop', true);
+    const root = document.getElementById('page-store-shop');
+    const fromChat = chatSections.has(section);
+    root.innerHTML = fromChat
+      ? '<section class="store-chat-entry"><h2>雙向完整版店家</h2><p role="status" aria-live="polite"></p><button type="button" data-chat-close>返回聊天室</button></section>'
+      : '<h2>我的商城管理</h2><p role="status" aria-live="polite"></p><button type="button" onclick="window.goPage(\'home\')">返回首頁</button>';
+    root.querySelector('p').textContent = failed ? '暫時無法確認會員資料，請重新連線後重試。' : '正在確認會員資料…';
+    if (fromChat) root.querySelector('[data-chat-close]').onclick = backToChat;
     if (failed) {
       const retry = document.createElement('button');
-      retry.type = 'button'; retry.textContent = '重新載入'; retry.onclick = () => window.location.reload(); root.appendChild(retry);
+      retry.type = 'button'; retry.textContent = '重新載入'; retry.onclick = () => window.location.reload();
+      (fromChat ? root.querySelector('.store-chat-entry') : root).appendChild(retry);
     }
   };
   // Attribution is not identity. The server verifies the actual opener's LINE token.
@@ -81,7 +136,7 @@
     function addReturn() {
       if (typeof options.onBack !== 'function') return;
       const back = document.createElement('button');
-      back.type = 'button'; back.textContent = '← 返回棋盤'; back.className = 'shop-link';
+      back.type = 'button'; back.textContent = options.backLabel || '← 返回棋盤'; back.className = 'shop-link';
       back.style.cssText = 'position:sticky;top:0;z-index:30;min-height:44px;margin:8px;padding:10px 16px;background:#fff;color:#047857;border:1px solid #047857;border-radius:12px;font-weight:700';
       back.onclick = () => { returned = true; options.onBack(); }; root.prepend(back);
     }

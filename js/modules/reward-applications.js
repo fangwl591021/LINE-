@@ -6,7 +6,7 @@ const kinds=['reward','discount','partner','full'];
 const kindNames={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴合作契約',full:'雙向完整版'};
 const kindLabels={reward:fieldLabels,discount:discountFieldLabels,partner:partnerFieldLabels,full:fullFieldLabels};
 function snapshotHtml(s){return `<h3>${esc(s.terms.title)}</h3>${Object.entries(labelsFor(s)).filter(([k])=>s.fields[k]?.length).map(([k,label])=>`<p class="ra-copy"><strong>${esc(label)}：</strong>${esc(displayFieldValue(k,s.fields[k]))}</p>`).join('')}${policyNotesFor(s).length?`<section class="ra-note" aria-label="本次簽署制度確認"><h3>本次簽署制度確認</h3>${policyNotesFor(s).map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}</section>`:''}<h3>完整合作條款</h3><small>版本：${esc(s.terms.version)}</small>${s.terms.paragraphs.map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}${sourceHashFor(s)?`<small class="ra-copy">原始範本 SHA-256：${esc(sourceHashFor(s))}</small>`:''}`;}
-export async function openRewardApplications({base,admin=false,target='',kind='reward',applicationId='',isCurrent=()=>true,fetcher=fetch,planControl=null}={}){
+export async function openRewardApplications({base,admin=false,target='',kind='reward',applicationId='',isCurrent=()=>true,fetcher=fetch,planControl=null,initialView='list'}={}){
  if(!kinds.includes(kind))throw Error('申請類型不正確');
  if(applicationId&&!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(applicationId))throw Error('申請連結格式不正確');
  const planNames={user:'一般會員',reward:'贈點單位',redeem:'特約折抵店家',store:'雙向完整版'};
@@ -36,12 +36,13 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
  };
  async function run(fn){if(busy||!current())return;busy=true;const controls=[...dialog.querySelectorAll('button,input,textarea,select')];controls.forEach(c=>c.disabled=true);message('處理中，請稍候…');try{await fn();if(current())message('');}catch(e){if(current())message(e.name==='TimeoutError'?'連線逾時，結果尚未確認。請使用原內容重試，或返回清單確認是否已送出。':e.message);}finally{busy=false;controls.forEach(c=>c.disabled=false);if(current()&&dialog.classList.contains('ra-list-view'))dialog.querySelectorAll('button').forEach(c=>c.disabled=false);if(attempt&&dialog.querySelector('[data-form=sign]')){dialog.querySelectorAll('[data-action=edit],[data-action=clear],input').forEach(c=>c.disabled=true);const b=dialog.querySelector('[data-form=sign] button[type=submit]');b.textContent='用原簽署內容重試送出';if(!dialog.querySelector('[data-form=sign] [data-action=refresh]'))b.insertAdjacentHTML('afterend','<button type="button" data-action="refresh">返回清單確認結果</button>');}}}
  const adminPath=()=>admin?'/admin':'';
- async function list(after=''){
+ async function list(after='',startApplication=false){
   const gen=++generation;const params=new URLSearchParams();if(admin&&target)params.set('target',target);if(after)params.set('after',after);
   shell(admin?'CRM 合作申請審核':'合作申請／我的合約',`${planSection()}${planEnabled?'<p>查看申請類型（不變更會員角色）</p>':''}<nav class="ra-kind-tabs" aria-label="申請種類">${kinds.map(value=>`<button data-action="kind" data-kind="${value}" aria-pressed="${kind===value}" class="${kind===value?'primary':''}">${kindNames[value]}</button>`).join('')}</nav><h3>${title()}${kind==='partner'?'':'申請'}</h3><p class="ra-note">${admin?(planEnabled?'下方為申請查詢與審核；會員角色請使用上方「儲存方案」。':'本頁只記錄審核結果，不會自動改變會員角色、贈點或折抵權限、商品設定或公開單位資料。'):kind==='partner'?'共創夥伴免費加入，與雙向完整版購買分開。簽署後送平台審核，契約登錄與資格開通另行核對。':kind==='full'?'一年期雙向完整版使用申請，費用與匯款資訊以完整申請書為準。簽署不等於付款或開通。':'免費申請'+title()+'。簽署後送平台審核，審核與權限開通分開處理。'}</p>${!admin?`<button class="primary" data-action="new">${kind==='partner'?'＋ 簽署共創夥伴契約':'＋ '+title()+'申請'}</button>`:''}<button data-action="refresh">重新整理</button><div data-list-results aria-live="polite"><p>讀取中…</p></div>`);
   dialog.classList.add('ra-list-view');
   dialog.querySelectorAll('button:not([data-action=close])').forEach(b=>b.disabled=true);
   const result=await api(adminPath()+'?'+params);if(gen!==generation)return;
+  if(startApplication&&!result.applications.length){await form();return;}
   dialog.querySelector('[data-list-results]').innerHTML=`${result.applications.map(a=>`<article class="ra-record"><strong>${esc(a.unit_name)}</strong><p>${esc(a.applicant_name)} · ${status(a.status)}</p><small>${esc(new Date(a.signed_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}))}</small><button data-action="detail" data-id="${esc(a.id)}">查看申請／下載 PDF</button></article>`).join('')||'<p>目前沒有已送出的申請。</p>'}${after?'<button data-action="refresh">回第一頁</button>':''}${result.next?`<button data-action="next" data-id="${esc(result.next)}">下一頁</button>`:''}`;
  }
  async function form(){
@@ -113,6 +114,7 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
    }
   });
  };
- shell('合作申請／我的合約','<p>讀取中…</p>');await run(()=>applicationId?detail(applicationId):list());
+ shell('合作申請／我的合約','<p>讀取中…</p>');
+ await run(()=>applicationId?detail(applicationId):list('',!admin&&kind==='full'&&initialView==='form'));
  return {close};
 }
