@@ -3120,7 +3120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen && !storeInviteTarget) {
-      if (directStoreManage) window.showStoreManagePending();
+      if (directStoreManage) window.showStoreManagePending(false, urlParams.get('shopSection'));
       else if (!directActivity) window.goPage('home', true);
       loadingScreen.classList.add('hidden');
     }
@@ -3184,7 +3184,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     if (directStoreManage && (!checkRes || checkRes.error || checkRes.success === false || typeof checkRes.isRegistered !== 'boolean' || (checkRes.isRegistered && (!checkRes.info || typeof checkRes.info !== 'object' || Array.isArray(checkRes.info))))) {
-      window.showStoreManagePending(true);
+      window.showStoreManagePending(true, urlParams.get('shopSection'));
+      return;
+    }
+    const chatStoreSection = urlParams.get('shopSection');
+    if (directStoreManage && window.isStoreChatSection?.(chatStoreSection)) {
+      if (checkRes.isRegistered) window.applyRegisteredUserSession(checkRes.info, {skipHome:true});
+      else window.applyUnregisteredHomeSession?.({referrerId:refId,networkId:netId,skipHome:true});
+      await window.openStoreChatEntry(chatStoreSection,checkRes.isRegistered);
       return;
     }
     allowLoginBackground = !storeInviteTarget && !!checkRes && !checkRes.error && checkRes.success !== false

@@ -45,6 +45,44 @@ test('only exact child keywords match; other mother keywords stay untouched',()=
  for(const value of ['我要店家專區','儀表板活動','會員分享','推薦好友','我的名片','店 家專區'])assert.equal(shopKeyword(event(value)),'');
  assert.equal(shopKeyword(event('儀錶板',A,{type:'postback'})),'');
 });
+test('888 responds once, opens the existing full plan, and follows the current sender status',async t=>{
+ const f=fixture(t);
+ f.sql.exec(readFileSync(new URL('../migrations/0077_hand_sign_contracts.sql',import.meta.url),'utf8'));
+ f.env.STORE_OA_PRODUCT_UPLOAD_FULL_ENABLED='true';
+ assert.equal(shopKeyword(event(' ８８８ ')),'store-onboarding');
+ for(const text of ['8888','88','店家888','888 申請'])assert.equal(shopKeyword(event(text)),'');
+ const sections=async uid=>actions(await buildShopKeywordMessage(event('888',uid),f.env)).map(action=>{
+  assert.equal(action.type,'uri');
+  const url=new URL(action.uri);
+  assert.equal(url.origin,'https://liff.line.me');
+  assert.deepEqual([...url.searchParams.keys()],['shopSection']);
+  assert(!url.href.includes(uid));
+  return url.searchParams.get('shopSection');
+ });
+ assert.deepEqual(await sections(A),['chat-store','chat-products']);
+ assert.deepEqual(await sections(B),['chat-store']);
+ assert.deepEqual(await sections(D),['chat-apply']);
+ assert.match((await buildShopKeywordMessage(event('888',D),f.env)).contents.body.contents[0].text,/會員註冊/);
+ assert.deepEqual(await sections(C),['chat-apply']);
+ f.sql.prepare("INSERT INTO full_applications VALUES('an-application',?,'本人合成商店','本人','{}','{}','hash','2026-11-27')").run(C);
+ assert.deepEqual(await sections(C),['chat-application-status']);
+ assert.match((await buildShopKeywordMessage(event('888',C),f.env)).altText,/審核中/);
+ f.sql.prepare("INSERT INTO full_application_reviews VALUES('an-application',?,'accepted','','2026-11-27')").run(B);
+ assert.deepEqual(await sections(C),['chat-application-status']);
+ assert.match((await buildShopKeywordMessage(event('888',C),f.env)).altText,/已通過/);
+ f.sql.exec("UPDATE full_application_reviews SET decision='rejected'");
+ assert.match((await buildShopKeywordMessage(event('888',C),f.env)).altText,/查看說明/);
+ f.sql.prepare("UPDATE users SET role='store' WHERE line_id=?").run(C);
+ assert.deepEqual(await sections(C),['chat-store','chat-products']);
+ const other=event('會員分享',D), direct=event('888',A), sent=[];
+ const group=event('888',B,{source:{type:'group',userId:B}});
+ assert.deepEqual(await consumeShopKeywords([group,direct,direct,other],f.env,async payload=>sent.push(payload)),[other]);
+ assert.equal(sent.length,1);
+ assert.equal(sent[0].replyToken,direct.replyToken);
+ f.sql.prepare("INSERT INTO users VALUES(?,'admin')").run(C);
+ await consumeShopKeywords([event('888',C)],f.env,async payload=>sent.push(payload));
+ assert.match(sent.at(-1).messages[0].text,/請稍後再輸入 888/);
+});
 test('admin global summary and store-owned summary do not mix stores or receipts',async t=>{
  const f=fixture(t),now=new Date('2026-09-11T01:00:00Z');
  const own=await readMallSummary(f.db,A,false,now),global=await readMallSummary(f.db,B,true,now);

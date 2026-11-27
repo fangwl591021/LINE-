@@ -1,12 +1,14 @@
 // Child-owned, display-only LINE keywords. Called only after signature verification.
 import {RETAIL_ROLES,storePlanForRole} from '../js/modules/store-cooperation-plans.mjs';
 import {readAdminOverviewCounts} from './admin-overview-counts.mjs';
+import {storeChatOnboarding} from './store-chat-onboarding.mjs';
 const merchantRoles=RETAIL_ROLES;
 const memberRoles=RETAIL_ROLES;
 const admins=['admin','總管'];
 export function shopKeyword(event){
  if(event?.type!=='message'||event.message?.type!=='text')return '';
  const text=String(event.message.text||'').normalize('NFKC').trim();
+ if(text==='888')return 'store-onboarding';
  if(text==='店家專區')return 'portal';
  if(['儀錶板','儀表板','仪表板'].includes(text))return 'dashboard';
  if(text==='商城業績')return 'sales';
@@ -106,6 +108,7 @@ export async function readMallSummary(db,uid,admin,now=new Date()){
 }
 export async function buildShopKeywordMessage(event,env,now){
  const kind=shopKeyword(event);
+ if(kind==='store-onboarding')return storeChatOnboarding(event,env,card,action,link);
  if(event.source?.type!=='user'||!/^U[0-9a-f]{32}$/.test(event.source?.userId||''))return kind==='dashboard'?null:{type:'text',text:'請在與官方帳號的一對一聊天室輸入此指令，避免公開店家營運資料。'};
  const uid=event.source.userId,db=env.ACTMASTER_DB;
  const rows=(await db.prepare('SELECT role FROM users WHERE line_id=? LIMIT 2').bind(uid).all()).results;
@@ -202,7 +205,7 @@ export async function consumeShopKeywords(events,env,reply){
   try{message=await buildShopKeywordMessage(event,env);}
   catch{
    if(kind==='dashboard')continue;
-   message={type:'text',text:'商城資料暫時無法讀取，請稍後再輸入「店家專區」或「儀錶板」。'};
+   message={type:'text',text:kind==='store-onboarding'?'目前無法確認店家狀態，請稍後再輸入 888。':'商城資料暫時無法讀取，請稍後再輸入「店家專區」或「儀錶板」。'};
   }
   if(message===null)continue;
   try{const result=await reply({replyToken:event.replyToken,messages:[message]},env);if(result?.success===false)console.warn('store_keyword_reply_failed');}

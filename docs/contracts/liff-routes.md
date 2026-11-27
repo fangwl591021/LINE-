@@ -206,6 +206,12 @@
 
 ## 測試要求
 
+### LINE 聊天室 888
+
+`shopSection=chat-apply`、`chat-application-status`、`chat-store`、`chat-products` 從 LINE 開啟後直接進入雙向完整版申請、申請進度或店家工作區。僅接受單一入口與 LIFF 登入參數。登入後重新查詢當前會員；未註冊者沿用會員註冊，沒有雙向方案或總管權限的帳號開啟商城管理網址時，導向本人申請進度。申請、付款、審核、角色及商品操作均使用現有服務。
+
+### 共用檢查
+
 每次改動 LIFF 路由前，至少檢查：
 
 - `shareCardId` 只開分享流程。
