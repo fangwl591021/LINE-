@@ -105,13 +105,14 @@ export async function readMallSummary(db,uid,admin,now=new Date()){
  return {today,shops,products,orders,redemptions};
 }
 export async function buildShopKeywordMessage(event,env,now){
- if(event.source?.type!=='user'||!/^U[0-9a-f]{32}$/.test(event.source?.userId||''))return {type:'text',text:'請在與官方帳號的一對一聊天室輸入此指令，避免公開店家營運資料。'};
+ const kind=shopKeyword(event);
+ if(event.source?.type!=='user'||!/^U[0-9a-f]{32}$/.test(event.source?.userId||''))return kind==='dashboard'?null:{type:'text',text:'請在與官方帳號的一對一聊天室輸入此指令，避免公開店家營運資料。'};
  const uid=event.source.userId,db=env.ACTMASTER_DB;
  const rows=(await db.prepare('SELECT role FROM users WHERE line_id=? LIMIT 2').bind(uid).all()).results;
- if(rows?.length!==1)return card('商城登入／註冊',['請先使用此 LINE 帳號完成會員註冊，再回聊天室操作。'],[action('開啟商城',link(env,'mine'))]);
+ if(rows?.length!==1)return kind==='dashboard'?null:card('商城登入／註冊',['請先使用此 LINE 帳號完成會員註冊，再回聊天室操作。'],[action('開啟商城',link(env,'mine'))]);
  const role=String(rows[0].role||'').toLowerCase(),merchant=merchantRoles.includes(role),platformAdmin=admins.includes(role),plan=storePlanForRole(role);
+ if(kind==='dashboard'&&!platformAdmin)return null;
  if(!memberRoles.includes(role))return {type:'text',text:'目前此帳號未開放商城管理，請聯絡管理員確認。'};
- const kind=shopKeyword(event);
  if(['portal','products','orders'].includes(kind)){
   if(kind==='orders'&&!merchant)return {type:'text',text:'商城訂單僅開放管理員、店長查詢本人店家。'};
   const match=String(event.message.text).normalize('NFKC').trim().match(/^商城(?:商品|訂單)(?: ([1-9]\d{0,3}))?$/);
@@ -122,7 +123,7 @@ export async function buildShopKeywordMessage(event,env,now){
    const introduction=`${plan.label}：${plan.productLimit===null?'管理員商品名額不限':`最多 ${plan.productLimit} 項商品（含草稿）`}。左右滑動即可使用店家操作。`;
    const products=card('我的商品',[introduction,...result.lines],[command('查看完整商品清單','商城商品'),action('新增／編輯商品（網頁）',link(env,'manage'))]);
    return carousel('店家專區',[
-    ...(platformAdmin?[checkinSettingsPage()]:[]),products,storeOperationsPage(env,merchant,[],true)
+    ...(platformAdmin?[checkinSettingsPage()]:[]),products,storeOperationsPage(env,merchant,[],platformAdmin)
    ]);
   }
   const buttons=[];
@@ -192,13 +193,18 @@ async function readChatPage(db,uid,kind,page){
 export async function consumeShopKeywords(events,env,reply){
  const remaining=[],seen=new Set();
  for(const event of events){
-  if(!shopKeyword(event)){remaining.push(event);continue;}
+  const kind=shopKeyword(event);
+  if(!kind){remaining.push(event);continue;}
   // Ownership is claimed even on denial/error: never fall through to mother replies.
   if(event.mode==='standby'||!event.replyToken||seen.has(event.replyToken))continue;
   seen.add(event.replyToken);
   let message;
   try{message=await buildShopKeywordMessage(event,env);}
-  catch{message={type:'text',text:'商城資料暫時無法讀取，請稍後再輸入「店家專區」或「儀錶板」。'};}
+  catch{
+   if(kind==='dashboard')continue;
+   message={type:'text',text:'商城資料暫時無法讀取，請稍後再輸入「店家專區」或「儀錶板」。'};
+  }
+  if(message===null)continue;
   try{const result=await reply({replyToken:event.replyToken,messages:[message]},env);if(result?.success===false)console.warn('store_keyword_reply_failed');}
   catch{console.warn('store_keyword_reply_failed');}
  }
