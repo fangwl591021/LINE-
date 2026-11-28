@@ -19,11 +19,12 @@ class Element{
 function fixture(fetcher=async()=>Response.json({success:true,sessions:[event()]})){
   const page=new Element(),list=new Element(),parent=new Element(),calls=[],listeners={},docListeners={},observers=[],revoked=[];parent.append(list);
   let token='test-a',logged=true;
-  const document={hidden:false,getElementById:id=>id==='page-home'?page:id==='user-activities-list'?list:id==='home-activity-filters'?parent.children.find(x=>x.id===id):null,createElement:tag=>new Element(tag),querySelectorAll:()=>list.children.filter(x=>x.dataset.homeMemberEvent),addEventListener:(k,f)=>docListeners[k]=f};
+  const document={hidden:false,getElementById:id=>id==='page-home'?page:id==='user-activities-list'?list:id==='home-activity-filters'?parent.children.find(x=>x.id===id):null,createElement:tag=>new Element(tag),querySelectorAll:selector=>selector==='[data-home-member-event]'?list.children.filter(x=>x.dataset.homeMemberEvent):[],addEventListener:(k,f)=>docListeners[k]=f};
   const window={Config:{API_URL:'https://point.test'},currentUserProfile:{userId:'member-a'},userRole:'user',currentNetworkId:'admin',liff:{isLoggedIn:()=>logged,getAccessToken:()=>token},addEventListener:(k,f)=>listeners[k]=f,escapeHTML:esc,escapeJS:esc,formatDisplayTime:v=>v};
   class TestURL extends URL{static createObjectURL(){return 'blob:synthetic';}static revokeObjectURL(url){revoked.push(url);}}
   const context=vm.createContext({window,document,location:{search:''},URL:TestURL,URLSearchParams,AbortController,Response,Date,console,Set,Map,Promise,navigator:{clipboard:{writeText:async()=>{}}},setTimeout,clearTimeout,setInterval(){throw Error('Unexpected polling');},clearInterval(){},MutationObserver:class{constructor(fn){observers.push(fn);}observe(){}},fetch:async(url,init)=>{calls.push({url,init});return fetcher(url,init);},getInitialActivityNetwork_:()=>''});
   vm.runInContext(ui,context);
+  vm.runInContext(home.slice(home.indexOf('    const homeActivityGroups'),home.indexOf('    function buildOnboardingSuggestions_')),context);
   const start=home.indexOf('    function getPublicActivityId_('),end=home.indexOf('    function normalizeActivityList_(',start);
   vm.runInContext(home.slice(start,end),context);vm.runInContext("let homeActivitiesLoadState_='ready'; function homeActivityLoadMarkup_(failed){return failed?'官方活動載入失敗':'官方活動載入中';}",context);
   window.allActivities=[];

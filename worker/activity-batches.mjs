@@ -62,7 +62,12 @@ export async function createActivityBatches(payload, env, module) {
     // A concurrent retry loses the root PK insert; the entire batch rolls back, then reads the winner.
     await db.batch(rows.map(row=>db.prepare(`INSERT INTO activities (${fields.join(',')}) VALUES (${fields.map(()=>'?').join(',')})`).bind(...fields.map(k=>row[k]))));
     return {success:true,data:{activityId:root.activity_id,batchCount:batches.length}};
-  } catch (_) { return await existing() || {success:false,error:'梯次尚未建立成功，可重試同一筆；不會退回單場建立'}; }
+  } catch (error) {
+    const saved=await existing();
+    if(saved)return saved;
+    if(String(error.message).includes('hosted_event_active'))return {success:false,code:'hosted_event_active',error:'未結束活動已達額度，請等一場結束或下架後再辦活動。'};
+    return {success:false,error:'梯次尚未建立成功，可重試同一筆；不會退回單場建立'};
+  }
 }
 export async function activityWithBatches(row, env, module) {
   const activity=module.activityRow(row);

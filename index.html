@@ -280,7 +280,7 @@
 <script src="js/modules/contract-organization.js?v=3" defer></script>
 <link rel="stylesheet" href="css/dealer-account.css?v=1">
 <script src="js/modules/dealer-account.js?v=3" defer></script>
-<link rel="stylesheet" href="css/home-discovery-20261110.css?v=10">
+<link rel="stylesheet" href="css/home-discovery-20261110.css?v=11">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -1409,22 +1409,25 @@
       <section id="home-recent-activity" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <div class="home-activity-heading">
           <h3 class="home-section-kicker">&#36817;&#26399;&#27963;&#21205;</h3>
-          <button type="button" onclick="window.openMemberEvents?.('catalog')" class="home-activity-catalog" aria-label="查看所有平台會員發布的活動">會員活動 <span aria-hidden="true">›</span></button>
+          <div class="home-activity-heading-actions">
+            <button type="button" onclick="window.openMemberEvents?.('catalog')" class="home-activity-catalog" aria-label="查看所有平台會員發布的活動">會員活動 <span aria-hidden="true">›</span></button>
+            <button id="home-host-activity" type="button" class="home-activity-catalog" onclick="window.openUnifiedActivityPublishing?.()" hidden>＋ 辦活動</button>
+          </div>
         </div>
         <div class="home-activity-categories grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
-          <button type="button" onclick="window.openHomeActivityCategory?.('activity')" class="home-quick-circle group">
+          <button type="button" onclick="window.openHomeActivityCategory?.('activity')" data-home-activity-group="activity" aria-pressed="false" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-orange-500">groups</span>
             <span class="home-quick-label !text-[13px]">&#27963;&#21205;</span>
           </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('course')" class="home-quick-circle group">
+          <button type="button" onclick="window.openHomeActivityCategory?.('course')" data-home-activity-group="course" aria-pressed="false" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-pink-500">co_present</span>
             <span class="home-quick-label !text-[13px]">&#35506;&#31243;</span>
           </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('social')" class="home-quick-circle group">
+          <button type="button" onclick="window.openHomeActivityCategory?.('social')" data-home-activity-group="social" aria-pressed="false" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">celebration</span>
             <span class="home-quick-label !text-[13px]">&#32879;&#35516;</span>
           </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('other')" class="home-quick-circle group">
+          <button type="button" onclick="window.openHomeActivityCategory?.('other')" data-home-activity-group="other" aria-pressed="false" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-violet-600">account_balance</span>
             <span class="home-quick-label !text-[13px]">&#20854;&#23427;</span>
           </button>
@@ -2760,7 +2763,7 @@
   </nav>
   <nav id="bottom-nav-admin" class="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex justify-evenly items-center px-2 py-2 z-[80] pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl hidden">
     <button onclick="window.goPage('admin-activities')" id="admin-nav-btn-admin-activities" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">fact_check</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">核銷</span></button>
-    <button onclick="window.goPage('active')"           id="admin-nav-btn-active" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">add_circle</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">建立</span></button>
+    <button onclick="window.openUnifiedActivityPublishing?.()"           id="admin-nav-btn-active" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">add_circle</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">辦活動</span></button>
     <button onclick="window.goPage('admin-crm')"        id="admin-nav-btn-admin-crm" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">groups</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">CRM</span></button>
     <button onclick="window.goPage('admin-announcements')" id="admin-nav-btn-admin-announcements" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">campaign</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">公告</span></button>
     <button onclick="window.goPage('card')"             id="admin-nav-btn-card" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">名片</span></button>
@@ -3037,7 +3040,7 @@
 <script src="js/modules/cardmaster.js?v=1.6"></script>
 <link rel="stylesheet" href="css/activity-visibility.css?v=1">
 <script src="js/modules/activity-visibility.js?v=1"></script>
-<script src="js/modules/activities.js?v=7.12"></script>
+<script src="js/modules/activities.js?v=7.12&unified=1"></script>
 <script src="js/modules/activity-checkin.js?v=1"></script>
 <script src="js/modules/admin.js?v=8.15&plans=1"></script>
 <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
@@ -3045,10 +3048,11 @@
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
 <script src="js/modules/activity-registration.js?v=1"></script>
 <script src="js/modules/activity-batches.js?v=2"></script>
-    <link rel="stylesheet" href="css/member-hosted-events.css?v=5&quota=1">
+    <link rel="stylesheet" href="css/member-hosted-events.css?v=5&quota=1&unified=1">
     <script src="js/modules/member-event-dm.js?v=2"></script>
-<script src="js/modules/member-hosted-events.js?v=8&quota=1&hosting=restricted"></script>
-<script src="js/modules/home.js?v=8.27&invite=2&ticker=2&compactActivity=1"></script>
+<script src="js/modules/unified-activity-publishing.js?v=1"></script>
+<script src="js/modules/member-hosted-events.js?v=8&quota=1&hosting=restricted&unified=1"></script>
+<script src="js/modules/home.js?v=8.27&invite=2&ticker=2&compactActivity=1&unified=1"></script>
 <script src="js/modules/home-discovery-20261110.js?v=3"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>

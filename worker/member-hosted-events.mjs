@@ -160,6 +160,14 @@ export async function handleMemberEvents(request,env,fetcher=fetch){
       return reply(await extractMemberEventDm(await boundedJson(request,MEMBER_DM_BODY_LIMIT),env,db,actor,fetcher,request.signal));
     }
     if(request.method==='GET'&&path==='/overview')return reply({success:true,...await overview(db,actor)});
+    if(request.method==='GET'&&path==='/hosting'){
+      const official=await rows(db,`SELECT a.activity_id AS id,a.name AS title,a.type AS category,a.start_time AS startsAt,
+        a.status,EXISTS(SELECT 1 FROM official_activity_host_slots s WHERE s.root_id=a.activity_id) AS ongoing
+        FROM activities a WHERE EXISTS(SELECT 1 FROM activity_host_identities i WHERE i.creator_id=a.creator_id AND i.owner_id=?)
+        AND (COALESCE(a.series_id,'')='' OR NOT EXISTS(SELECT 1 FROM activities p WHERE p.activity_id=a.series_id))
+        ORDER BY a.start_time DESC,a.activity_id LIMIT 200`,actor.memberId);
+      return reply({success:true,official});
+    }
     if(request.method==='GET'&&path==='/eligibility'){
       const quota=await hostingQuota(db,actor);
       const active=await stmt(db,"SELECT id FROM member_hosted_events WHERE owner_id=? AND status='active' AND julianday(ends_at)>julianday('now') ORDER BY ends_at,id LIMIT 1",actor.memberId).first();

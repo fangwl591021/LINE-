@@ -44,7 +44,7 @@ const hostedEvents=[{...memberRegistrations[0],id:'50145127-cc64-4611-a19d-01978
 const rosterRows=[{displayName:'最新來賓',status:'registered',registeredAt:'2026-10-08T03:00:00Z'},
   {displayName:'已到場來賓',status:'registered',checkedInAt:'2026-10-08T06:30:00Z',registeredAt:'2026-10-07T03:00:00Z'},
   {displayName:'取消的來賓',status:'cancelled',registeredAt:'2026-10-06T03:00:00Z'}];
-let emptyRoster=false,failRoster=false,holdHistory=false,releaseHistory;
+let emptyRoster=false,failRoster=false,holdHistory=false,releaseHistory,historyHeld;
 const documents=[];
 let holdMember=true,releaseMember,failActivity=false,holdActivity=false,releaseActivity;
 let friendScenario=false;
@@ -58,12 +58,17 @@ await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com')return route.fulfill({contentType:'text/javascript',body:tailwind});
   if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{if(${friendScenario})history.replaceState(null,'',location.pathname);},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>{window.__friendReads=(window.__friendReads||0)+1;return {friendFlag:!${friendScenario}||sessionStorage.getItem('fixture-friend')==='1'};}};`});
+  if(url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname==='/v1/friend-referral/issue'&&req.method()==='POST'){
+    assert.equal(req.postDataJSON().token,'synthetic-token');
+    return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,url:url.origin+'/v1/friend-referral/visit?token=fixture'})});
+  }
   if(url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname.startsWith('/v1/member-events/')) {
     assert.equal(req.headers().authorization,'Bearer synthetic-token');
     const path=url.pathname.replace('/v1/member-events','');let data;
     if(req.method()==='GET'){
       memberReads.push(path+url.search);
-      if(path==='/overview')data={sessions:[],my:memberRegistrations,hosting:hostedEvents};
+      if(path==='/overview')data={sessions:[],my:memberRegistrations,hosting:hostedEvents,hostingAllowed:true};
+      else if(path==='/hosting')data={official:[]};
       else if(path==='/eligibility')data={canHost:!hostedEvents.some(e=>e.status==='active'&&Date.parse(e.endsAt)>Date.now())};
       else if(path.endsWith('/registrations')&&hostedEvents.some(e=>path==='/'+e.id+'/registrations')){
         if(failRoster)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({success:false,error:'僅本場主辦可查看'})});
@@ -82,6 +87,7 @@ await page.route('**/*',async route=>{
   }
   if(req.method()==='POST'&&url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON();calls.push({action,payload});
+    assert.ok(payload,'Expected an activity API payload for '+action+' at '+url.pathname);
     assert.equal(payload.lineAccessToken,'synthetic-token');assert.equal(payload.userId,actor);
     let data;
     if(action==='checkUser') {
@@ -108,7 +114,7 @@ await page.route('**/*',async route=>{
       }
       data={rowId:'latest',activityId:id,existed:false};
     } else if(action==='getMyActivities'){
-      if(holdHistory){holdHistory=false;await new Promise(resolve=>{releaseHistory=resolve;});}data=registrations;
+      if(holdHistory){holdHistory=false;await new Promise(resolve=>{releaseHistory=resolve;historyHeld();});}data=registrations;
     }
     else if(action==='getPublicActivities') {
       // Homepage roots do not have loaded dates; entering detail must read them first.
@@ -330,6 +336,7 @@ try {
   // Keep the member activity/course engine separate; use its real authenticated read-only modal.
   await page.addStyleTag({content:await readAsset('css/member-hosted-events.css')});
   await page.addScriptTag({content:await readAsset('js/modules/member-hosted-events.js')});
+  await page.addScriptTag({content:await readAsset('js/modules/unified-activity-publishing.js')});
   await page.evaluate(()=>window.goPage('home',true));
   const writesBeforeShortcut=calls.filter(c=>['joinActivity','registerUser'].includes(c.action)).length;
   for(const width of [320,390,1440]) {
@@ -383,14 +390,20 @@ try {
   emptyRoster=false;failRoster=true;await hostDialog.locator('.me-card').first().getByRole('button',{name:'報名名冊',exact:true}).click();await hostDialog.getByText('僅本場主辦可查看',{exact:true}).waitFor();
   assert.equal(await hostDialog.getByText('最新來賓',{exact:true}).count(),0);failRoster=false;
   assert.equal(memberWrites.length,0,'viewing records/scanner/calendar does not publish or redeem');
-  // Open from the homepage; private history is deliberately held to prove immediate visible navigation.
-  const historyBefore=calls.filter(c=>c.action==='getMyActivities').length;holdHistory=true;
-  await hostDialog.getByRole('button',{name:'＋ 到行事曆辦活動',exact:true}).click();
-  await page.locator('.me-dialog').waitFor({state:'detached'});assert.equal(await page.evaluate(()=>currentPage),'my-activities');
-  await page.locator('#personal-agenda-form').waitFor({state:'visible'});assert.equal(await page.locator('#agenda-host-activity').isChecked(),true);
+  // The hosting list opens the publisher directly, independently of private history.
+  const historyBefore=calls.filter(c=>c.action==='getMyActivities').length;
+  await hostDialog.getByRole('button',{name:'＋ 辦活動',exact:true}).click();
+  const publishingForm=hostDialog.locator('form.me-form');await publishingForm.waitFor();
+  assert.equal(calls.filter(c=>c.action==='getMyActivities').length,historyBefore);
+  assert.equal(memberWrites.length,0);
+  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});assert.equal(await publishingForm.isVisible(),true);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(out,`hosting-draft-${width}.png`),fullPage:true});}
+  await hostDialog.getByRole('button',{name:'關閉會員活動',exact:true}).click();
+  holdHistory=true;
+  const historyStarted=new Promise(resolve=>{historyHeld=resolve;});
+  await page.evaluate(()=>{window.goPage('my-activities');});
   await page.waitForFunction(()=>document.getElementById('my-activities-list')?.textContent.includes('載入中'));
+  await historyStarted;
   assert.ok(releaseHistory);assert.equal(calls.filter(c=>c.action==='getMyActivities').length,historyBefore+1);
-  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.locator('#personal-agenda-form').isVisible(),true);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(out,`hosting-draft-${width}.png`),fullPage:true});}
   releaseHistory();await page.waitForFunction(title=>document.getElementById('my-activities-list')?.textContent.includes(title),registrations[0].activityName);
   await page.evaluate(()=>{window.toggleAgendaForm(false);window.personalAgendaMonth=new Date(2026,9,1);window.selectPersonalAgendaDate('2026-10-08');});
   await page.getByText('我的已結束活動',{exact:true}).waitFor();assert.equal(await page.getByText('我的已取消活動',{exact:true}).count(),0);
@@ -398,7 +411,7 @@ try {
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(out,'calendar-history-390.png'),fullPage:true});
   // Explicit create still reviews dates and visibility before any synthetic write, then projects once.
   await page.addStyleTag({content:await readAsset('css/activity-visibility.css')});await page.addScriptTag({content:await readAsset('js/modules/activity-visibility.js')});
-  await page.evaluate(()=>window.toggleAgendaForm(true));await page.locator('#agenda-title').fill('新辦活動日曆測試');
+  await page.evaluate(()=>window.toggleAgendaForm(true));await page.locator('#agenda-host-activity').check();await page.locator('#agenda-title').fill('新辦活動日曆測試');
   await page.locator('#agenda-start').fill('2027-10-15T14:30');await page.locator('#agenda-end').fill('2027-10-15T16:00');
   await page.locator('#agenda-location').fill('合成會議室');await page.locator('#agenda-notes').fill('平台活動草稿與行事曆投影測試');
   await page.getByRole('button',{name:'儲存行程',exact:true}).click();

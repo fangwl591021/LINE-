@@ -1673,16 +1673,23 @@ const HomeModule = (function() {
         if (target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
+    const homeActivityGroups = {
+        activity: new Set(['活動','例會','參訪']),
+        course: new Set(['課程','教學','講座']),
+        social: new Set(['聯誼'])
+    };
+    let homeActivityBrowseGroup = '';
+    function matchesHomeActivityGroup(type) {
+        const value = String(type || '活動').trim();
+        if (homeActivityBrowseGroup === 'other') return !Object.values(homeActivityGroups).some(group => group.has(value));
+        return homeActivityGroups[homeActivityBrowseGroup]?.has(value) ?? true;
+    }
     window.openHomeActivityCategory = function(type) {
-        if (typeof window.goPage === 'function') window.goPage('active');
-        setTimeout(function() {
-            const map = { activity: '例會', course: '課程', social: '\u806F\u8ABC', other: '其他' };
-            const value = map[type] || '例會';
-            ['q-type', 'f-type', 's-type'].forEach(function(id) {
-                const select = document.getElementById(id);
-                if (select) select.value = value;
-            });
-        }, 120);
+        if (type !== 'other' && !Object.hasOwn(homeActivityGroups,type)) return;
+        homeActivityBrowseGroup = homeActivityBrowseGroup === type ? '' : type;
+        window.homeActivityFilter = '全部';
+        window.renderHomeActivities();
+        document.getElementById('home-recent-activity')?.scrollIntoView({block:'start'});
     };
     function buildOnboardingSuggestions_(contacts) {
         const rows = Array.isArray(contacts) ? contacts : [];
@@ -2063,6 +2070,7 @@ const HomeModule = (function() {
     window.homeActivityFilter = '全部';
 
     window.setHomeActivityFilter = function(type) {
+        homeActivityBrowseGroup = '';
         window.homeActivityFilter = type || '全部';
         window.renderHomeActivities();
     };
@@ -2109,7 +2117,7 @@ const HomeModule = (function() {
 
         filterBar.className = 'flex gap-2 overflow-x-auto hide-scrollbar pb-2 mb-3';
         filterBar.innerHTML = categories.map((type, index) => {
-            const active = type === window.homeActivityFilter;
+            const active = !homeActivityBrowseGroup && type === window.homeActivityFilter;
             const safeType = window.escapeHTML(type);
             const jsType = window.escapeJS(type);
             const category = `<button type="button" onclick="window.setHomeActivityFilter('${jsType}')" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 ${active ? 'bg-[#ff5a1f] text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-100'}">${safeType}</button>`;
@@ -2120,6 +2128,11 @@ const HomeModule = (function() {
     window.renderHomeActivities = function() {
         const list = document.getElementById('user-activities-list');
         if (!list) return;
+        const entry = document.getElementById('home-host-activity');
+        if (entry) entry.hidden = !window.canOfferUnifiedActivityHosting?.();
+        document.querySelectorAll('[data-home-activity-group]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.homeActivityGroup === homeActivityBrowseGroup));
+        });
 
         const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(a=>!a.seriesId && canSeePublicActivity_(a));
         const allActiveActs = activities
@@ -2131,7 +2144,8 @@ const HomeModule = (function() {
         const types = Array.from(new Set([...allActiveActs.map(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim()), ...memberEvents.map(e => e.category || '活動')].filter(Boolean)));
         renderHomeActivityFilters_(types);
 
-        const activeActs = window.homeActivityFilter === '全部'
+        const activeActs = homeActivityBrowseGroup ? allActiveActs.filter(a=>matchesHomeActivityGroup(a.activityType || a.type || a['活動類型']))
+            : window.homeActivityFilter === '全部'
             ? allActiveActs
             : allActiveActs.filter(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim() === window.homeActivityFilter);
 
@@ -2172,7 +2186,7 @@ const HomeModule = (function() {
                 </div>`;
         }).join('');
         if (homeActivitiesLoadState_ !== 'ready') list.insertAdjacentHTML('beforeend', `<div class="col-span-2">${homeActivityLoadMarkup_(homeActivitiesLoadState_ === 'failed')}</div>`);
-        const memberCount = window.renderHomeMemberEvents?.(list, window.homeActivityFilter) || 0;
+        const memberCount = window.renderHomeMemberEvents?.(list, window.homeActivityFilter, homeActivityBrowseGroup ? matchesHomeActivityGroup : null) || 0;
         if (!activeActs.length && !memberCount && homeActivitiesLoadState_ === 'ready') {
             list.className = 'space-y-4';
             list.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">目前暫無開放中的活動</p>';

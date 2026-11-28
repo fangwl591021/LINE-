@@ -501,20 +501,6 @@ window.submitActivityForm = async function(mode) {
   if (btn && !pendingSubmission) delete btn._activitySubmission;
   try {
 
-  const role = currentUser?.role || 'user';
-  if (role !== 'admin' && !pendingSubmission) {
-    try {
-      const acts = await window.fetchAPI('getPublicActivities', {}, true);
-      const myActs = (acts || []).filter(a => String(a.userId) === String(currentUserProfile.userId));
-      const limit = window.LIMITS[role].activities;
-      if (myActs.length >= limit) {
-        return alert('用量限制:您的方案 (' + role + ') 最多只能建立 ' + limit + ' 個活動,請聯絡管理員升級。');
-      }
-    } catch(e) {
-      console.log("讀取目前活動數量失敗,跳過限制檢查", e);
-    }
-  }
-
   const pfx = mode === 'quick' ? 'q' : (mode === 'full' ? 'f' : 's');
 
   const nameInput = document.getElementById(pfx + '-name');
