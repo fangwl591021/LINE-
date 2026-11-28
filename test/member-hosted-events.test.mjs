@@ -6,6 +6,46 @@ import {fixture,UIDS} from './helpers/member-events-fixture.mjs';
 import {handleMemberEvents} from '../worker/member-hosted-events.mjs';
 const ongoing=f=>({...f.input(),startsAt:new Date(Date.now()-1800000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString(),registrationClosesAt:new Date(Date.now()+3600000).toISOString()});
 
+test('mixed publishing paths share quota atomically, preserve one slot for a series, and list only the owner’s official events',async t=>{
+  const f=fixture(t);
+  f.sql.exec("DROP TABLE activities; CREATE TABLE activities(activity_id TEXT PRIMARY KEY,name TEXT,type TEXT,start_time TEXT,end_time TEXT,creator_id TEXT,status TEXT,series_id TEXT DEFAULT '');");
+  f.sql.exec(readFileSync(new URL('../migrations/0097_shared_activity_hosting_quota.sql',import.meta.url),'utf8'));
+  const start=new Date(Date.now()+8*3600000+86400000).toISOString().slice(0,16).replace('T',' ');
+  const end=new Date(Date.now()+8*3600000+90000000).toISOString().slice(0,16).replace('T',' ');
+  const insert=f.sql.prepare("INSERT INTO activities VALUES(?,'合成活動','課程',?,?,?,?,?)");
+  const write=(id,uid=UIDS.host,root='',status='上架',ends=end)=>insert.run(id,start,ends,uid,status,root);
+  write('series',UIDS.old);
+  write('date-one',UIDS.old,'series');
+  write('date-two',UIDS.old,'series');
+  write('draft',UIDS.host,'','下架');
+  write('expired',UIDS.host,'','上架','2020-10-08 08:00');
+  write('other-owner',UIDS.other);
+  assert.equal((await f.api('/eligibility',{member:'old'})).activeCount,1);
+  const hosting=await f.api('/hosting',{member:'old'});
+  assert.deepEqual(hosting.official.map(event=>event.id),['draft','expired','series']);
+  assert.equal(hosting.official.find(event=>event.id==='series').ongoing,1);
+  assert.equal((await f.api('/hosting',{member:'guest'})).official.length,0);
+
+  const event=await f.create();
+  assert.throws(()=>write('full'),/hosted_event_active/);
+  assert.throws(()=>f.sql.prepare("UPDATE activities SET status='上架' WHERE activity_id='draft'").run(),/hosted_event_active/);
+  f.sql.prepare("UPDATE activities SET end_time=? WHERE activity_id='series'").run(end);
+  const quota=await f.api('/eligibility');
+  assert.deepEqual([quota.limit,quota.activeCount,quota.canHost],[2,2,false]);
+  assert.equal((await f.api('/events',{data:f.input()})).code,'hosted_event_active');
+
+  await f.api('/'+event.id+'/cancel-event',{data:{requestKey:crypto.randomUUID(),revision:0}});
+  f.sql.prepare("UPDATE activities SET status='上架' WHERE activity_id='draft'").run();
+  assert.equal((await f.api('/eligibility')).activeCount,2);
+  f.sql.prepare("UPDATE activities SET status='下架' WHERE activity_id='series'").run();
+  assert.equal((await f.api('/eligibility')).activeCount,1);
+  await f.create();
+  assert.equal((await f.api('/eligibility')).activeCount,2);
+  assert.throws(()=>write('denied',UIDS.guest),/hosted_event_active/);
+  for(const id of ['admin1','admin2','admin3'])write(id,UIDS.other);
+  assert.equal((await f.api('/eligibility',{member:'other'})).canHost,true);
+});
+
 test('ended hosting roster remains readable only to its canonical owner, including checked-in and cancelled history',async t=>{
   const f=fixture(t),e=await f.create();await f.api('/'+e.id+'/register',{member:'guest',data:{}});await f.api('/'+e.id+'/register',{member:'other',data:{}});
   await f.api('/'+e.id+'/cancel',{member:'other',data:{}});

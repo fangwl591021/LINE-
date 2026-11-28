@@ -17553,8 +17553,9 @@ async function dispatchAction(action, payload, request, env) {
       }
       try {
         const d1Result = await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
-        if (d1Result && d1Result.success !== false) return d1Result;
+        if (d1Result && (d1Result.success !== false || d1Result.code === 'hosted_event_active')) return d1Result;
       } catch (e) {
+        if (String(e.message).includes('hosted_event_active')) return {success:false,error:'未結束活動已達額度，請等一場結束或下架後再辦活動。'};
         console.error("D1 bulkAddRegistrants fallback", e);
       }
       return {success:false,error:'活動尚未建立成功，請重試同一筆'};
@@ -17564,6 +17565,7 @@ async function dispatchAction(action, payload, request, env) {
         const d1Result = await D1ActivityModule.upsertActivity(payload || {}, env);
         if (d1Result) return { success: true, data: { activityId: d1Result.activity_id } };
       } catch (e) {
+        if (String(e.message).includes('hosted_event_active')) return {success:false,error:'未結束活動已達額度，請等一場結束或下架後再辦活動。'};
         console.error("D1 updateActivity fallback", e);
       }
       return {success:false,error:'活動尚未更新成功，請稍後重試'};
@@ -17667,6 +17669,7 @@ async function dispatchAction(action, payload, request, env) {
         const d1Result = await D1ActivityModule.setActivityStatus(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
+        if (String(e.message).includes('hosted_event_active')) return {success:false,error:'未結束活動已達額度，請等一場結束或下架後再辦活動。'};
         console.error("D1 setActivityStatus failed", e);
       }
       return {success:false,error:'活動上架狀態尚未更新成功，請稍後重試'};
@@ -17676,6 +17679,7 @@ async function dispatchAction(action, payload, request, env) {
         const d1Result = await D1ActivityModule.duplicateActivity(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
+        if (String(e.message).includes('hosted_event_active')) return {success:false,error:'未結束活動已達額度，請等一場結束或下架後再辦活動。'};
         console.error("D1 duplicateActivity failed", e);
       }
       return {success:false,error:'活動尚未複製成功，請稍後重試'};

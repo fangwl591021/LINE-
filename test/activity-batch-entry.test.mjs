@@ -18,7 +18,7 @@ function fixture(activities = [series, single]) {
   const list = {innerHTML:'', className:''};
   const button = {innerHTML:'我要報名', disabled:false};
   const context = {
-    document:{getElementById:id=>id==='activity-batch-choices'?choices:id==='user-activities-list'?list:null},
+    document:{getElementById:id=>id==='activity-batch-choices'?choices:id==='user-activities-list'?list:null,querySelectorAll:()=>[]},
     allActivities:activities, currentPage:'home', homeActivityFilter:'全部', homeActivitiesLoadState_:'ready',
     currentUser:{name:'會員', phone:'0912345678'},
     canSeePublicActivity_:()=>true, renderHomeActivityFilters_:()=>{}, formatDisplayTime:String,
@@ -33,6 +33,7 @@ function fixture(activities = [series, single]) {
   vm.createContext(context);
   vm.runInContext(read('js/modules/activity-batches.js'), context);
   vm.runInContext(block('function getPublicActivityId_(', 'function getCurrentEffectiveNetwork_('), context);
+  vm.runInContext(block('const homeActivityGroups', 'function buildOnboardingSuggestions_('), context);
   vm.runInContext(block('window.renderHomeActivities =', 'function normalizeActivityList_('), context);
   vm.runInContext(block('let activityJoinBusy =', '// === 模組初始化入口 ==='), context);
   return {context,calls,choices,list,button,selected};

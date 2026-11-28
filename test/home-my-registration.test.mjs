@@ -21,7 +21,8 @@ function fixture(){
     toggleMyActivitySection:(id,force)=>calls.push(['section',id,force]),
     openMemberEvents:view=>calls.push(['member-view',view]),showToast:(message,error)=>calls.push(['toast',message,error])};
   c.window=c;vm.createContext(c);
-  vm.runInContext(block('window.homeActivityFilter =', 'window.renderHomeActivities ='),c);
+  vm.runInContext(block('const homeActivityGroups', 'function buildOnboardingSuggestions_('),c);
+  vm.runInContext(block("\n    window.homeActivityFilter = '全部';", 'window.renderHomeActivities ='),c);
   vm.runInContext("let homeActivitiesLoadState_='loading';"+block('function homeActivityLoadMarkup_(', 'window.loadUserActivities ='),c);
   return {c,calls,nodes,list,parent,records};
 }

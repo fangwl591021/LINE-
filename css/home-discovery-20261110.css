@@ -73,6 +73,10 @@ body.home-page:not(.business-home-v2-active) .home-lower-panel .home-quick-label
 
 .home-activity-heading {display:flex;align-items:center;justify-content:space-between;gap:8px}
 .home-activity-catalog {min-height:44px;padding:0 10px;border:1px solid #bfe5d9;border-radius:10px;background:#eefbf7;color:#006c55;font-size:13px;font-weight:800}
+.home-activity-heading-actions {display:flex;gap:4px;align-items:center}
+#home-host-activity {color:white;background:#00795f}
+#home-host-activity[hidden] {display:none}
+body.home-page:not(.business-home-v2-active) #home-recent-activity [data-home-activity-group][aria-pressed=true] {outline:2px solid #00795f;outline-offset:-2px}
 body.home-page:not(.business-home-v2-active) #home-recent-activity {
   margin-top:0;
   padding-block:6px 8px;

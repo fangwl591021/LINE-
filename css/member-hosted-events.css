@@ -35,3 +35,9 @@
 .me-card-grid .me-actions{display:grid;margin:10px 0 0;gap:6px}
 .me-card-grid .me-actions button{padding:7px 3px;font-size:13px}
 .me-card-grid .me-thumbnail-image{height:auto;aspect-ratio:4/3}
+.me-advanced {margin:14px 0;padding:12px;border:1px solid #b9dacf;border-radius:12px}
+.me-advanced summary {cursor:pointer;min-height:44px;display:list-item;padding:10px 0;color:#006b56;font-weight:800}
+.me-advanced select {display:block;width:100%;min-height:44px;border:1px solid #c7d7df;border-radius:10px;padding:8px 12px}
+.me-advanced fieldset {min-width:0;border:1px solid #e1ece7;border-radius:10px;padding:8px 10px;margin-bottom:10px}
+.me-advanced textarea {min-height:84px}
+.me-agenda-entry [hidden] {display:none!important}

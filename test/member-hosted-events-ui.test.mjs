@@ -30,27 +30,23 @@ test('privacy, auth captured on every request, stale response and close/scan/tic
 });
 
 const block=(start,end)=>{const a=ui.indexOf(start),b=ui.indexOf(end,a+start.length);assert.ok(a>=0&&b>a);return ui.slice(a,b);};
-test('hosting calendar navigates once and opens the real draft immediately, without awaiting history',()=>{
-  for(const alreadyChecked of [false,true]){
-    const calls=[],checkbox={checked:alreadyChecked,closest:()=>({hidden:true}),dispatchEvent:e=>calls.push(['change',e.type])};
-    const window={goPage:(...args)=>calls.push(['page',...args]),loadMyActivities:()=>{calls.push(['load']);return new Promise(()=>{});},toggleAgendaForm:force=>calls.push(['draft',force])};
-    const c={window,document:{getElementById:id=>{assert.equal(id,'agenda-host-activity');return checkbox;}},Event:class{constructor(type){this.type=type;}}};
-    vm.createContext(c);vm.runInContext(block('  function openHostingCalendar(', '  async function showList('),c);
-    c.openHostingCalendar({close:()=>calls.push(['close']),note:message=>calls.push(['note',message])});
-    assert.deepEqual(calls,[['close'],['page','my-activities',true],['load'],['draft',true],...alreadyChecked?[]:[['change','change']]]);
-    assert.equal(checkbox.checked,true);assert.doesNotMatch(ui,/switchPage/);
-  }
-});
-test('missing calendar module keeps the modal open and explains retry instead of silently doing nothing',()=>{
-  const calls=[],c={window:{},document:{getElementById:()=>null}};vm.createContext(c);
-  vm.runInContext(block('  function openHostingCalendar(', '  async function showList('),c);
-  c.openHostingCalendar({close:()=>calls.push('closed'),note:message=>calls.push(message)});
-  assert.deepEqual(calls,['行事曆功能尚未載入，請重新整理後再試']);
+test('home, calendar and management start one form behind the server quota',async()=>{
+  const calls=[],m={closed:false,work:fn=>fn()},window={};
+  let quota={limit:2,canHost:true};
+  const c={window,api:async path=>{calls.push(path);return quota;},review:(_m,seed,_after,unified)=>calls.push({seed,unified}),hostingRequired:'角色不能辦活動'};
+  vm.createContext(c);vm.runInContext(block('  const canOfferHosting=', '  function hostingQuotaText('),c);
+  assert.match(html,/id="home-host-activity"[^>]*openUnifiedActivityPublishing/);
+  assert.match(ui,/button\('＋ 辦活動',window\.openUnifiedActivityPublishing/);
+  await c.startHosting(m);
+  assert.equal(calls[0],'/eligibility');assert.equal(calls[1].unified,true);
+  quota={limit:2,canHost:false};await assert.rejects(c.startHosting(m),/已達額度/);
+  quota={limit:0,canHost:false};await assert.rejects(c.startHosting(m),/角色不能辦活動/);
+  assert.equal(calls.filter(value=>value.unified).length,1);
 });
 test('calendar projection retains past host and registered events once, but excludes cancellations and public strangers',async()=>{
   const e=(id,past=false)=>({id,title:id,status:'active',startsAt:past?'2020-10-08T06:00:00Z':'2099-10-08T06:00:00Z',endsAt:past?'2020-10-08T08:00:00Z':'2099-10-08T08:00:00Z',organizerName:'主辦'});
   const host=e('host'),past=e('past-host',true),guest=e('past-registered',true),cancelled={...e('cancelled'),status:'cancelled'};
-  const calls=[],form={hidden:false},c={window:{},document:{getElementById:()=>({checked:false,closest:()=>form})},api:async path=>{calls.push(path);return {hostingAllowed:false,hosting:[host,past,cancelled],my:[{...host,registrationStatus:'registered'},{...guest,registrationStatus:'registered'},{...e('cancelled-registration'),registrationStatus:'cancelled'}],sessions:[e('stranger')]};},closed:e=>e.status!=='active'||Date.parse(e.endsAt)<=Date.now()};
+  const calls=[],form={hidden:false},c={window:{},document:{getElementById:()=>({checked:false,closest:()=>form}),querySelector:()=>null},api:async path=>{calls.push(path);return {hostingAllowed:false,hosting:[host,past,cancelled],my:[{...host,registrationStatus:'registered'},{...guest,registrationStatus:'registered'},{...e('cancelled-registration'),registrationStatus:'cancelled'}],sessions:[e('stranger')]};},closed:e=>e.status!=='active'||Date.parse(e.endsAt)<=Date.now()};
   vm.createContext(c);vm.runInContext(block('  window.loadMemberHostedAgenda=', '  const query='),c);
   const rows=await c.window.loadMemberHostedAgenda();
   assert.equal(form.hidden,true);

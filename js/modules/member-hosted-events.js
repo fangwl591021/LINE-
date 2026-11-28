@@ -93,11 +93,11 @@
     const url=linkFor(e.id);try{if(navigator.share){await navigator.share({title:e.title,text:e.title,url});return;}await navigator.clipboard.writeText(url);window.showToast?.('活動報名連結已複製');}
     catch(error){if(error.name!=='AbortError'&&window.getHomeMemberEvents().some(row=>row.id===e.id)){window.showToast?.('請從活動明細複製報名連結',true);window.openMemberEvents('catalog',e.id);}}
   }
-  window.renderHomeMemberEvents=(list,filter='全部')=>{
+  window.renderHomeMemberEvents=(list,filter='全部',matches=null)=>{
     stopScope(home.media);home.media=null;const records=window.getHomeMemberEvents();
     if(!homeVisible()||!home.actor)return 0;
     const scope={controllers:new Set(),cleanups:[],closed:false,generation:0};home.media=scope;let count=0;
-    for(const e of records.filter(row=>filter==='全部'||(row.category||'活動')===filter)){
+    for(const e of records.filter(row=>matches?matches(row.category||'活動'):filter==='全部'||(row.category||'活動')===filter)){
       const article=document.createElement('article');article.className='me-home-card';article.dataset.homeMemberEvent=e.id;
       article.innerHTML=`<div class="me-home-info"><small>會員活動 · ${esc(e.category||'活動')}</small><p class="me-home-time">${esc(stamp(e.startsAt))}</p><h4>${esc(e.title)}</h4><p class="me-home-location">${esc(e.location)}</p><p class="me-home-fee">${esc(e.feeText)}</p></div>`;
       list.append(article);mountCover(article,e,scope,true,()=>window.openMemberEvents('catalog',e.id));
@@ -116,21 +116,33 @@
     window.addEventListener('pagehide',resetHome);window.addEventListener('pageshow',()=>{if(homeVisible())void window.loadHomeMemberEvents();});document.addEventListener('visibilitychange',()=>{visible=homeVisible();if(visible)void window.loadHomeMemberEvents();else resetHome();});
   }
   watchHome();
-  function openHostingCalendar(m){
-    if([window.goPage,window.loadMyActivities,window.toggleAgendaForm].some(fn=>typeof fn!=='function'))return m.note('行事曆功能尚未載入，請重新整理後再試');
-    m.close();window.goPage('my-activities',true);void window.loadMyActivities();window.toggleAgendaForm(true);
-    const c=document.getElementById('agenda-host-activity');
-    if(!c)return window.showToast?.('辦活動選項尚未載入，請重新整理後再試',true);
-    c.closest('.me-host-mode').hidden=false;
-    if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change'));}
+  const canOfferHosting=()=>['admin','總管','store','店長'].includes(String(window.currentUser?.role||window.userRole||'').trim().toLowerCase());
+  function startHosting(m,seed={},after){
+    return m.work(async()=>{
+      const quota=await api('/eligibility',undefined,m);
+      if(quota.limit===0)throw Error(hostingRequired);
+      if(!quota.canHost)throw Error('未結束活動已達額度，請等一場結束或取消後再辦活動。');
+      if(m.closed)return;
+      review(m,seed,after,true);
+    });
   }
+  window.openUnifiedActivityPublishing=()=>{
+    const m=modal('辦活動');
+    if(m)void startHosting(m);
+  };
+  window.canOfferUnifiedActivityHosting=canOfferHosting;
   function hostingQuotaText(quota){
     if(quota.limit===0)return hostingRequired;
     return quota.limit===null?`辦活動不限數量，目前 ${quota.activeCount} 場未結束`:
       `未結束活動 ${quota.activeCount}／${quota.limit} 場`;
   }
   async function showList(m,view='catalog'){
-    const [data,quota]=await Promise.all([api('/overview',undefined,m),view==='hosting'?api('/eligibility',undefined,m):null]);
+    const hosting=view==='hosting';
+    const [data,quota,official]=await Promise.all([
+      api('/overview',undefined,m),
+      hosting?api('/eligibility',undefined,m):null,
+      hosting?api('/hosting',undefined,m).catch(()=>null):null
+    ]);
     if(m.closed)return;m.frame('會員辦活動');m.onBack=null;
     const nav=document.createElement('nav');nav.className='me-tabs';for(const [key,label]of [['catalog','活動列表'],['mine','我的報名'],['hosting','我辦的活動']]){const b=button(label,()=>m.work(()=>showList(m,key)));b.setAttribute('aria-pressed',String(view===key));nav.append(b);}m.body.append(nav);
     if(quota){
@@ -139,14 +151,28 @@
       m.body.append(note);
       if(quota.limit!==0){
         if(!quota.canHost)note.textContent+='，請等一場結束或取消後再辦活動。';
-        const create=button('＋ 到行事曆辦活動',()=>openHostingCalendar(m));create.disabled=!quota.canHost;
+        const create=button('＋ 辦活動',()=>startHosting(m),true);create.disabled=!quota.canHost;
         m.body.append(create);
       }
     }
     const records=view==='catalog'?data.sessions:view==='mine'?data.my:data.hosting;
-    if(!records.length){const p=document.createElement('p');p.textContent='目前沒有紀錄';m.body.append(p);}
+    if(!records.length&&(!hosting||official?.official.length===0)){const p=document.createElement('p');p.textContent='目前沒有紀錄';m.body.append(p);}
     for(const e of records){const article=document.createElement('article');article.className='me-card'+(closed(e)?' me-muted-card':'');article.innerHTML=`<h3>${esc(e.title)}</h3><p class="me-muted">分類：${esc(e.category||'活動')}</p><p>${esc(stamp(e.startsAt))}–${esc(stamp(e.endsAt))}</p><small>${esc(e.organizerName)} · ${closed(e)?e.status==='cancelled'?'已取消':'已結束':visibilityLabel(e)+' · 報名 '+e.registrationCount+(e.capacity?' / '+e.capacity:'')} · ${esc(e.feeText)}</small>${view==='mine'?`<p>${e.registrationStatus==='cancelled'?'已取消報名':e.checkedInAt?'已核銷':'已報名'} · 報名 ${esc(stamp(e.registeredAt))}</p>`:''}`;m.body.append(article);mountCover(article,e,m,true);const a=actions(article);a.append(button('查看活動',()=>m.work(()=>detail(m,e.id,view))));if(view==='hosting')a.append(button('報名名冊',()=>m.work(()=>roster(m,e.id,0,'hosting'))));}
-    if(records.length){
+    for(const e of official?.official||[]){
+      const article=document.createElement('article');
+      article.className='me-card'+(e.ongoing?'':' me-muted-card');
+      article.innerHTML=`<h3>${esc(e.title)}</h3><p class="me-muted">進階活動 · ${esc(e.category)} · ${esc(e.status)}</p><p>${esc(String(e.startsAt||'').replace('T',' ').slice(0,16))}</p>`;
+      const a=actions(article);
+      a.append(button('報名名單／掃碼核銷',()=>{m.close();void window.openCheckinPage(e.id,e.title);}));
+      a.append(button('管理活動',()=>{m.close();window.goPage('admin-activities');}));
+      if(e.status==='上架')a.append(button('分享',()=>{m.close();void window.openActivityShareModal?.(e.id,e.title);}));
+      m.body.append(article);
+    }
+    if(hosting&&!official){
+      const retry=button('重新讀取進階活動',()=>m.work(()=>showList(m,'hosting')));
+      m.body.append(retry);
+    }
+    if(m.body.querySelector(':scope > .me-card')){
       const cards=document.createElement('div');cards.className='me-card-grid';
       cards.append(...m.body.querySelectorAll(':scope > .me-card'));m.body.append(cards);
     }
@@ -179,13 +205,21 @@
     const redeem=async value=>{if(redeeming||!valid())return;redeeming=true;try{const r=await api('/'+id+'/redeem',{ticket:value},m);if(valid())status.textContent=(r.duplicate?'已核銷，未重複計算。':'核銷成功。')+' '+stamp(r.checkedInAt);}catch(e){if(valid())status.textContent=e.message;}finally{redeeming=false;}};
     m.body.append(button('開始掃描',async()=>{if(starting)return;starting=true;stop();last='';try{await decoder();if(!valid())return;stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:640}},audio:false});if(!valid()){stop();return;}video.srcObject=stream;await video.play();const canvas=document.createElement('canvas'),context=canvas.getContext('2d',{willReadFrequently:true});const tick=async()=>{if(!valid()||!stream)return;if(video.readyState>=2&&video.videoWidth){canvas.width=640;canvas.height=Math.round(video.videoHeight/video.videoWidth*640);context.drawImage(video,0,0,canvas.width,canvas.height);const frame=context.getImageData(0,0,canvas.width,canvas.height),found=window.jsQR(frame.data,frame.width,frame.height,{inversionAttempts:'dontInvert'});if(found?.data&&found.data!==last){last=found.data;await redeem(found.data);}else if(!found)last='';}if(valid()&&stream)timer=setTimeout(tick,250);};void tick();}catch(e){stop();if(valid())status.textContent='無法開啟相機，請允許相機權限或改貼上 QR 內容';}finally{starting=false;}}));m.body.append(button('核銷貼上的 QR',()=>redeem(m.body.querySelector('[data-ticket-input]').value.trim())),button('查看更新名單',()=>m.work(()=>roster(m,id,0,returnView))));
   }
-  function review(m,seed,after){
+  function review(m,seed,after,unified=false){
     const eventId=seed.id||'',requestKey=crypto.randomUUID(),boundActor=login();m.frame(eventId?'確認活動修改':'確認活動草稿');m.onBack=null;
     const field=(name,label,type,value,extra='')=>`<label>${label}<input name="${name}" type="${type}" required value="${esc(value??'')}" ${extra}></label>`;
     m.body.innerHTML=`<p>確認後才公開給平台會員。私人聯絡人不會公開；不贈點、不扣點。</p><form class="me-form">${field('title','活動名稱','text',seed.title,'maxlength="100"')}${field('category','活動分類','text',seed.category||'活動','maxlength="40" list="member-event-category-options"')}<datalist id="member-event-category-options">${['活動','課程','聯誼','其他','合作商業交流'].map(value=>`<option value="${esc(value)}"></option>`).join('')}</datalist><div class="me-actions" aria-label="常用活動分類">${['活動','課程','聯誼','其他'].map(value=>`<button type="button" data-category="${esc(value)}">${esc(value)}</button>`).join('')}</div><p class="me-muted">可選常用分類，或直接輸入自訂名稱（1–40字）。</p><div class="me-times">${field('startsAt','開始時間','datetime-local',local(seed.startsAt))}${field('endsAt','結束時間','datetime-local',local(seed.endsAt))}</div>${field('location','活動地點／線上網址','text',seed.location,'maxlength="300"')}<label>活動內容<textarea name="description" required maxlength="2000" rows="5">${esc(seed.description)}</textarea></label>${field('capacity','人數上限（0 表示不限）','number',seed.capacity??0,'min="0" max="10000" step="1"')}${field('registrationClosesAt','報名截止時間','datetime-local',local(seed.registrationClosesAt||seed.startsAt))}${field('feeText','收費資訊（只作展示，預設免費）','text',seed.feeText??'免費','maxlength="100"')}<label>封面圖片網址（選填）<input name="coverUrl" type="url" value="${esc(seed.coverUrl)}" maxlength="2048" placeholder="https://…"></label><div class="me-actions"><button type="button" data-cancel>取消／返回修改</button><button type="submit" class="me-primary">${eventId?'確認儲存修改':'確認發布活動'}</button></div></form>`;
     m.body.querySelector('p').textContent='確認送出時選擇全平台公開或僅歸屬可見。私人聯絡人不會公開；不贈點、不扣點。';
     const form=m.body.querySelector('form');form.querySelector('[data-cancel]').onclick=m.close;
+    const readAdvanced=unified?window.mountUnifiedActivityOptions?.(form):null;
+    const starts=form.elements.startsAt,cutoff=form.elements.registrationClosesAt;
+    let previousStart=starts.value;
+    starts.addEventListener('change',()=>{
+      if(!cutoff.value||cutoff.value===previousStart)cutoff.value=starts.value;
+      previousStart=starts.value;
+    });
     let submission=null;
+    let officialPayload=null;
     for(const b of form.querySelectorAll('[data-category]'))b.onclick=()=>{form.elements.category.value=b.dataset.category;form.elements.category.dispatchEvent(new Event('input',{bubbles:true}));};
     let dmFile=seed.dmFile||null,selectedFile=null,previewUrl='';
     const media=document.createElement('section');media.className='me-media-review';media.innerHTML='<h3>活動 DM（選填）</h3><p>圖片會作為列表縮圖與完整 DM。只有確認發布／儲存修改才上傳，公開給登入平台會員。</p><img alt="待發布活動 DM" hidden><p data-media-note></p><label>上傳／更換 DM<input data-media-file type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"></label><button type="button" data-media-remove>移除 DM／封面</button>';
@@ -200,12 +234,43 @@
     if(window.installMemberEventDm)m.cleanups.push(window.installMemberEventDm(dmMount,{api,confirm,isValid:()=>!m.closed&&m.generation===generation,get:()=>({title:form.elements.title.value,description:form.elements.description.value,location:form.elements.location.value,startsAt:form.elements.startsAt.value,endsAt:form.elements.endsAt.value,feeText:form.elements.feeText.value}),apply:(fields,actor,file)=>{if(actor.uid!==boundActor.uid||actor.token!==boundActor.token)throw Error('登入身分已變更，請重新開啟');for(const [name,value]of Object.entries(fields))form.elements[name].value=value;form.elements.registrationClosesAt.value=fields.startsAt;dmFile=file;selectedFile=null;showPreview();}}));
     form.onsubmit=e=>{e.preventDefault();if(!form.reportValidity())return;m.work(async()=>{const check=()=>{const actor=login();if(m.closed||m.generation!==generation||actor.uid!==boundActor.uid||actor.token!==boundActor.token)throw Error('登入或頁面已變更，請重新開啟');};check();
       if(!submission){
-        const values=Object.fromEntries(['title','category','description','location','startsAt','endsAt','capacity','registrationClosesAt','feeText','coverUrl'].map(name=>[name,form.elements[name].value]));values.category=values.category.trim();values.startsAt=utc(values.startsAt);values.endsAt=utc(values.endsAt);values.registrationClosesAt=utc(values.registrationClosesAt);values.capacity=Number(values.capacity);values.requestKey=requestKey;if(eventId)values.revision=seed.revision;
+        const advanced=readAdvanced?.();
+        const values=Object.fromEntries(['title','category','description','location','startsAt','endsAt','capacity','registrationClosesAt','feeText','coverUrl'].map(name=>[name,form.elements[name].value]));
+        values.category=values.category.trim();
+        if(!advanced){
+          values.startsAt=utc(values.startsAt);values.endsAt=utc(values.endsAt);
+          values.registrationClosesAt=utc(values.registrationClosesAt);
+          values.capacity=Number(values.capacity);
+        }
+        values.requestKey=requestKey;if(eventId)values.revision=seed.revision;
         const popup=new AbortController();m.controllers.add(popup);let visibility;
         try{visibility=await window.chooseActivityVisibility({current:seed.visibility,signal:popup.signal,isCurrent:()=>{check();return true;}});}finally{m.controllers.delete(popup);}
         if(!visibility)return;check();values.visibility=visibility;
         const file=selectedFile;if(file){const controller=new AbortController();m.controllers.add(controller);try{values.dmFile=await window.prepareMemberEventDmFile(file,controller.signal);}finally{m.controllers.delete(controller);}}else if(dmFile)values.dmFile=dmFile;
+        if(advanced){
+          if(values.dmFile?.type==='application/pdf')throw Error('進階活動的封面請改用圖片。PDF 可用一般活動發布。');
+          if(values.dmFile){
+            check();
+            const uploaded=await window.fetchAPI('uploadImageToR2',{base64Image:values.dmFile.data},true);
+            check();
+            if(!uploaded?.url)throw Error(uploaded?.error||'封面上傳未完成，請重試。');
+            advanced.imageUrl=uploaded.url;
+          }
+          officialPayload={...advanced,activityId:'ACT_'+requestKey,visibility,createOnly:true};
+        }
         check();submission=values;
+      }
+      if(officialPayload){
+        check();
+        const result=await window.fetchAPI('bulkAddRegistrants',officialPayload,true);
+        check();
+        if(result?.error||result?.activityId!==officialPayload.activityId)throw Error(result?.error||'發布結果未確認，請重試同一筆活動。');
+        window._adminActsCache={data:null,time:0};
+        m.close();
+        window.showToast?.('活動已發布');
+        void window.loadUserActivities?.();
+        window.openMemberEvents('hosting');
+        return;
       }
       check();const result=await api(eventId?'/'+eventId+'/update':'/events',submission,m,45000);void window.loadHomeMemberEvents({force:true});window.showToast?.(result.event.visibility==='platform'?'活動已發布／更新，全平台會員可見':'活動已發布／更新，僅歸屬會員可見');if(after)await after(result.event);else await detail(m,result.event.id,'hosting');});};
   }
@@ -214,7 +279,7 @@
     const form=document.getElementById('personal-agenda-form');if(!form||document.getElementById('agenda-host-activity'))return;const host=document.createElement('section');host.className='me-host-mode';host.hidden=true;host.innerHTML='<label><input id="agenda-host-activity" type="checkbox"> 辦活動</label><p>開放報名，由你查看名單及掃碼核銷。不贈點、不扣點。先確認活動草稿，再發布。</p><p data-host-quota role="status" hidden></p>';form.querySelector('.space-y-3')?.prepend(host);
     let generation=0;const checkbox=host.querySelector('input');checkbox.onchange=async()=>{const current=++generation;const enabled=checkbox.checked;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=enabled;}if(!enabled)delete form.memberDmDraft;if(enabled)try{const r=await api('/eligibility');if(current!==generation||!checkbox.checked)return;const note=host.querySelector('[data-host-quota]');note.textContent=hostingQuotaText(r);note.hidden=false;if(r.limit===0){host.hidden=true;throw Error(hostingRequired);}if(!r.canHost)throw Error('未結束活動已達額度，請等一場結束或取消後再辦活動。');}catch(e){if(current===generation){checkbox.checked=false;for(const id of ['agenda-related','agenda-recurrence','agenda-remind']){const el=document.getElementById(id);if(el)el.disabled=false;}checkbox.dispatchEvent(new Event('change'));window.showToast?.(e.message,true);}};};
     if(window.installMemberEventDm)window.installMemberEventDm(host,{api,confirm,checkbox,watch:form,isValid:()=>checkbox.checked&&!form.classList.contains('hidden'),discard:()=>{delete form.memberDmDraft;},get:()=>({title:document.getElementById('agenda-title')?.value,description:document.getElementById('agenda-notes')?.value,location:document.getElementById('agenda-location')?.value,startsAt:document.getElementById('agenda-start')?.value,endsAt:document.getElementById('agenda-end')?.value}),apply:(fields,actor,file)=>{for(const [name,id]of Object.entries({title:'agenda-title',description:'agenda-notes',location:'agenda-location',startsAt:'agenda-start',endsAt:'agenda-end'})){const el=document.getElementById(id);if(el)el.value=fields[name];}form.memberDmDraft={...actor,feeText:fields.feeText,dmFile:file};}});
-    const panel=document.getElementById('personal-agenda-panel');if(panel){const entry=document.createElement('section');entry.className='me-agenda-entry';entry.innerHTML='<h3>會員辦活動</h3><p class="me-muted">行事曆勾選辦活動；與官方活動／梯次分開。</p>';const a=actions(entry);a.append(button('活動列表',()=>window.openMemberEvents()),button('我的報名',()=>window.openMemberEvents('mine')),button('我辦的活動',()=>window.openMemberEvents('hosting')));panel.append(entry);}
+    const panel=document.getElementById('personal-agenda-panel');if(panel){const entry=document.createElement('section');entry.className='me-agenda-entry';entry.innerHTML='<h3>活動與報名</h3>';const a=actions(entry),create=button('＋ 辦活動',window.openUnifiedActivityPublishing,true);create.dataset.unifiedHosting='';create.hidden=!canOfferHosting();a.append(create,button('活動列表',()=>window.openMemberEvents()),button('我的報名',()=>window.openMemberEvents('mine')),button('我辦的活動',()=>window.openMemberEvents('hosting')));panel.append(entry);}
   };
   window.reviewMemberHostedAgenda=()=>{const value=id=>document.getElementById(id)?.value||'';const m=modal('確認活動草稿');if(!m)return;try{const starts=value('agenda-start'),ends=value('agenda-end'),dm=document.getElementById('personal-agenda-form')?.memberDmDraft,actor=login();if(dm&&(dm.uid!==actor.uid||dm.token!==actor.token))throw Error('登入身分已變更，請重新辨識或填寫');review(m,{title:value('agenda-title'),description:value('agenda-notes'),location:value('agenda-location'),startsAt:starts?utc(starts):'',endsAt:ends?utc(ends):'',registrationClosesAt:starts?utc(starts):'',capacity:0,feeText:dm?.feeText,dmFile:dm?.dmFile},async e=>{m.close(true);window.toggleAgendaForm?.(false);for(const id of ['agenda-title','agenda-start','agenda-end','agenda-related','agenda-location','agenda-notes']){const el=document.getElementById(id);if(el)el.value='';}const c=document.getElementById('agenda-host-activity');if(c){c.checked=false;c.dispatchEvent(new Event('change'));}window.personalAgendaVoiceDraft=null;await window.loadPersonalAgenda?.();window.openMemberEvents('hosting',e.id);});}catch(e){m.note(e.message);}};
   // Called only while opening the existing calendar. No startup API or storage.
@@ -222,6 +287,8 @@
     const checkbox=document.getElementById('agenda-host-activity'),host=checkbox?.closest('.me-host-mode');
     if(host&&!checkbox.checked)host.hidden=true;
     const data=await api('/overview'),unique=new Map();
+    const unified=document.querySelector('#personal-agenda-panel [data-unified-hosting]');
+    if(unified)unified.hidden=data.hostingAllowed!==true;
     if(host){
       host.hidden=data.hostingAllowed!==true;
       if(host.hidden&&checkbox.checked){
