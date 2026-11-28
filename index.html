@@ -280,7 +280,7 @@
 <script src="js/modules/contract-organization.js?v=3" defer></script>
 <link rel="stylesheet" href="css/dealer-account.css?v=1">
 <script src="js/modules/dealer-account.js?v=3" defer></script>
-<link rel="stylesheet" href="css/home-discovery-20261110.css?v=9">
+<link rel="stylesheet" href="css/home-discovery-20261110.css?v=10">
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -1406,6 +1406,32 @@
         </button>
       </div>
 
+      <section id="home-recent-activity" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+        <div class="home-activity-heading">
+          <h3 class="home-section-kicker">&#36817;&#26399;&#27963;&#21205;</h3>
+          <button type="button" onclick="window.openMemberEvents?.('catalog')" class="home-activity-catalog" aria-label="查看所有平台會員發布的活動">會員活動 <span aria-hidden="true">›</span></button>
+        </div>
+        <div class="home-activity-categories grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
+          <button type="button" onclick="window.openHomeActivityCategory?.('activity')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-orange-500">groups</span>
+            <span class="home-quick-label !text-[13px]">&#27963;&#21205;</span>
+          </button>
+          <button type="button" onclick="window.openHomeActivityCategory?.('course')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-pink-500">co_present</span>
+            <span class="home-quick-label !text-[13px]">&#35506;&#31243;</span>
+          </button>
+          <button type="button" onclick="window.openHomeActivityCategory?.('social')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">celebration</span>
+            <span class="home-quick-label !text-[13px]">&#32879;&#35516;</span>
+          </button>
+          <button type="button" onclick="window.openHomeActivityCategory?.('other')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-violet-600">account_balance</span>
+            <span class="home-quick-label !text-[13px]">&#20854;&#23427;</span>
+          </button>
+        </div>
+        <div id="user-activities-list" class="hidden"></div>
+      </section>
+
       <section id="home-promo-carousel" aria-label="首頁精選介紹" aria-roledescription="輪播">
         <div class="home-promo-frame">
           <button id="home-mall-banner" class="home-promo-slide" type="button" onclick="window.openHomeShopCategory('')" aria-label="探索合作店家">
@@ -1551,30 +1577,6 @@
             <span class="home-quick-label">折抵店家</span>
           </button>
         </div>
-      </section>
-
-      <section id="home-recent-activity" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
-        <h3 class="home-section-kicker">&#36817;&#26399;&#27963;&#21205;</h3>
-        <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
-          <button type="button" onclick="window.openHomeActivityCategory?.('activity')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-orange-500">groups</span>
-            <span class="home-quick-label !text-[13px]">&#27963;&#21205;</span>
-          </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('course')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-pink-500">co_present</span>
-            <span class="home-quick-label !text-[13px]">&#35506;&#31243;</span>
-          </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('social')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">celebration</span>
-            <span class="home-quick-label !text-[13px]">&#32879;&#35516;</span>
-          </button>
-          <button type="button" onclick="window.openHomeActivityCategory?.('other')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-violet-600">account_balance</span>
-            <span class="home-quick-label !text-[13px]">&#20854;&#23427;</span>
-          </button>
-        </div>
-        <div id="user-activities-list" class="hidden"></div>
-        <button type="button" onclick="window.openMemberEvents?.('catalog')" class="mt-5 w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left text-emerald-800" aria-label="查看所有平台會員發布的活動"><strong>會員活動 ›</strong><span class="block mt-1 text-[13px]">查看會員發布的活動 DM、詳細內容與報名</span></button>
       </section>
 
     </div>
@@ -3046,7 +3048,7 @@
     <link rel="stylesheet" href="css/member-hosted-events.css?v=5&quota=1">
     <script src="js/modules/member-event-dm.js?v=2"></script>
 <script src="js/modules/member-hosted-events.js?v=8&quota=1&hosting=restricted"></script>
-<script src="js/modules/home.js?v=8.27&invite=2&ticker=2"></script>
+<script src="js/modules/home.js?v=8.27&invite=2&ticker=2&compactActivity=1"></script>
 <script src="js/modules/home-discovery-20261110.js?v=3"></script>
 <script src="js/modules/activity-entry.js?v=2"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
