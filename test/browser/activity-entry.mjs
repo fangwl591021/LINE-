@@ -58,6 +58,10 @@ await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com')return route.fulfill({contentType:'text/javascript',body:tailwind});
   if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{if(${friendScenario})history.replaceState(null,'',location.pathname);},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>{window.__friendReads=(window.__friendReads||0)+1;return {friendFlag:!${friendScenario}||sessionStorage.getItem('fixture-friend')==='1'};}};`});
+  if(url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname==='/v1/friend-referral/issue'&&req.method()==='POST'){
+    assert.equal(req.postDataJSON().token,'synthetic-token');
+    return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,url:url.origin+'/v1/friend-referral/visit?token=fixture'})});
+  }
   if(url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname.startsWith('/v1/member-events/')) {
     assert.equal(req.headers().authorization,'Bearer synthetic-token');
     const path=url.pathname.replace('/v1/member-events','');let data;
@@ -83,6 +87,7 @@ await page.route('**/*',async route=>{
   }
   if(req.method()==='POST'&&url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON();calls.push({action,payload});
+    assert.ok(payload,'Expected an activity API payload for '+action+' at '+url.pathname);
     assert.equal(payload.lineAccessToken,'synthetic-token');assert.equal(payload.userId,actor);
     let data;
     if(action==='checkUser') {
@@ -406,7 +411,7 @@ try {
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(out,'calendar-history-390.png'),fullPage:true});
   // Explicit create still reviews dates and visibility before any synthetic write, then projects once.
   await page.addStyleTag({content:await readAsset('css/activity-visibility.css')});await page.addScriptTag({content:await readAsset('js/modules/activity-visibility.js')});
-  await page.evaluate(()=>window.toggleAgendaForm(true));await page.locator('#agenda-title').fill('新辦活動日曆測試');
+  await page.evaluate(()=>window.toggleAgendaForm(true));await page.locator('#agenda-host-activity').check();await page.locator('#agenda-title').fill('新辦活動日曆測試');
   await page.locator('#agenda-start').fill('2027-10-15T14:30');await page.locator('#agenda-end').fill('2027-10-15T16:00');
   await page.locator('#agenda-location').fill('合成會議室');await page.locator('#agenda-notes').fill('平台活動草稿與行事曆投影測試');
   await page.getByRole('button',{name:'儲存行程',exact:true}).click();
