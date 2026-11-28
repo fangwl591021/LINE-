@@ -25,7 +25,8 @@ if (!bannerModule.includes("window.goPage('customers')") || !bannerModule.includ
 if (!bannerModule.includes("page === 'card' || page === 'customers'")) fail('alternate banner must persist across card and customer pages');
 
 const featureStart = html.indexOf('id="home-feature-section"');
-const featureEnd = html.indexOf('&#36817;&#26399;&#27963;&#21205;', featureStart);
+const featureEnd = html.indexOf('</section>', featureStart);
+if (featureStart < 0 || featureEnd <= featureStart) fail('找不到首頁精選功能區塊');
 const featured = html.slice(featureStart, featureEnd);
 if (featured.includes("window.goPage('customers')") || featured.includes('&#25105;&#30340;&#23458;&#25142;')) {
   fail('首頁精選功能 must not keep a duplicate 我的客戶 entry');

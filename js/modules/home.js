@@ -2150,18 +2150,18 @@ const HomeModule = (function() {
             const img = window.escapeHTML(a.imageUrl || a.image_url || a['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80');
 
             return `
-                <div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">
-                    <div class="w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">
+                <div class="home-public-activity-card bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">
+                    <div class="home-public-activity-cover w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">
                         <img src="${img}" class="w-full h-full object-cover" loading="lazy">
                         <span class="absolute top-2 left-2 bg-[#ff5a1f] text-white text-[11px] px-2.5 py-1 rounded-lg font-black shadow-sm">${type}</span>
                     </div>
-                    <div class="p-3 flex flex-col flex-1">
-                        <div class="flex justify-end mb-2">
+                    <div class="home-public-activity-info p-3 flex flex-col flex-1">
+                        <div class="home-public-activity-time flex justify-end mb-2">
                             <span class="text-slate-400 text-[10px] font-mono shrink-0">${time}</span>
                         </div>
                         <h4 class="font-black text-slate-800 text-[14px] leading-snug line-clamp-2 mb-1">${title}</h4>
                         <p class="text-slate-500 text-[12px] line-clamp-2 leading-relaxed mb-3">${desc}</p>
-                        <div class="grid grid-cols-3 gap-2 mt-auto">
+                        <div class="home-public-activity-actions grid grid-cols-3 gap-2 mt-auto">
                             <button type="button" onclick="event.stopPropagation(); window.openActivityDetail('${actId}')" class="py-2 bg-slate-100 text-slate-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform">詳細</button>
                             <button type="button" onclick="event.stopPropagation(); window.openActivityShareModal('${actId}', '${shareTitle}')" class="py-2 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex items-center justify-center gap-1">
                                 <span class="material-symbols-outlined text-[15px]">ios_share</span> 分享
